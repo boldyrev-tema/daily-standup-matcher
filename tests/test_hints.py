@@ -53,6 +53,16 @@ def test_get_hints_returns_empty_on_malformed_json():
     assert ask is None
 
 
+def test_get_hints_returns_empty_when_json_is_not_an_object():
+    resp = Mock()
+    resp.raise_for_status = Mock()
+    resp.json.return_value = {"choices": [{"message": {"content": "[]"}}]}
+    with patch("hints.requests.post", return_value=resp):
+        said, ask = get_hints(LINES, TASK, api_key="fake")
+    assert said == []
+    assert ask is None
+
+
 def test_get_hints_only_uses_last_90_seconds():
     old_line = Line(t=1.0, who="Кто-то", text="Реплика минуту назад")
     recent_line = Line(t=95.0, who="Дарья", text="Свежая реплика")
