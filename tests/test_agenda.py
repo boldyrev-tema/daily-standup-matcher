@@ -1,0 +1,60 @@
+from datetime import datetime, timedelta, timezone
+
+from agenda import REOPENED_STATUS, build_agenda, pick_alarm
+from sprint_snapshot import Task
+
+
+def _task(key, assignee, status, days_ago, now):
+    return Task(
+        key=key,
+        title=f"Заголовок {key}",
+        assignee=assignee,
+        status=status,
+        updated_at=now - timedelta(days=days_ago),
+    )
+
+
+NOW = datetime(2026, 8, 29, tzinfo=timezone.utc)
+
+
+def test_build_agenda_filters_by_team():
+    tasks = [
+        _task("A-1", "Аня", "S", 1, NOW),
+        _task("A-2", "Боря", "S", 1, NOW),
+    ]
+    result = build_agenda(tasks, team=["Аня"])
+    assert [t.key for t in result] == ["A-1"]
+
+
+def test_build_agenda_sorts_by_recency_descending():
+    old = _task("A-1", "Аня", "S", 5, NOW)
+    new = _task("A-2", "Аня", "S", 1, NOW)
+    result = build_agenda([old, new], team=["Аня"])
+    assert [t.key for t in result] == ["A-2", "A-1"]
+
+
+def test_build_agenda_limits_to_six():
+    tasks = [_task(f"A-{i}", "Аня", "S", i, NOW) for i in range(9)]
+    result = build_agenda(tasks, team=["Аня"])
+    assert len(result) == 6
+    assert [t.key for t in result] == ["A-0", "A-1", "A-2", "A-3", "A-4", "A-5"]
+
+
+def test_pick_alarm_prefers_reopened_over_stale():
+    older_reopened = _task("A-1", "Аня", REOPENED_STATUS, 5, NOW)
+    newer_reopened = _task("A-2", "Аня", REOPENED_STATUS, 1, NOW)
+    stale = _task("A-3", "Аня", "В работе", 10, NOW)
+    agenda = [older_reopened, newer_reopened, stale]
+    assert pick_alarm(agenda, now=NOW) is older_reopened
+
+
+def test_pick_alarm_falls_back_to_stale_when_no_reopened():
+    stale = _task("A-1", "Аня", "В работе", 5, NOW)
+    fresh = _task("A-2", "Аня", "В работе", 1, NOW)
+    assert pick_alarm([stale, fresh], now=NOW) is stale
+
+
+def test_pick_alarm_none_when_nothing_qualifies():
+    fresh1 = _task("A-1", "Аня", "В работе", 1, NOW)
+    fresh2 = _task("A-2", "Аня", "В работе", 2, NOW)
+    assert pick_alarm([fresh1, fresh2], now=NOW) is None
