@@ -11,7 +11,6 @@
     --dim: #9C97A3;
     --mute: #6b6672;
     --live: #54C77A;
-    --alarm: #E36B6B;
     --accent-text: #D6C8FF;
     --accent-bg: rgba(139,92,246,.16);
     --accent-border: rgba(139,92,246,.5);
@@ -84,7 +83,10 @@
       <button class="btn" id="control-btn" style="margin-top:8px;">Начать</button>
     </div>
     <div class="zone zone-hear">
-      <div class="zone-label" id="hear-label">Слышу</div>
+      <div style="display:flex;align-items:center;">
+        <span class="live-dot" id="live-dot" style="display:none;"></span>
+        <span class="zone-label" id="hear-label">Слышу</span>
+      </div>
       <p class="body-text" id="hear-text">Транскрипт появится, когда начнётся запись</p>
     </div>
     <div class="zone zone-hint">
@@ -106,8 +108,10 @@ function renderMeeting(state) {
     ? `не обсудили ${state.remaining_count}` : `осталось ${state.remaining_count}`;
   document.getElementById("control-btn").textContent = state.phase === "after" ? "Сначала" : "Начать";
 
+  document.getElementById("live-dot").style.display = state.phase === "live" ? "inline-block" : "none";
+
   const hearLabel = document.getElementById("hear-label");
-  hearLabel.textContent = (state.last_line && state.last_line.who) || "Слышу";
+  setLabelText(hearLabel, (state.last_line && state.last_line.who) || "Слышу");
   document.getElementById("hear-text").textContent =
     (state.last_line && state.last_line.text) || "Транскрипт появится, когда начнётся запись";
 
@@ -115,11 +119,11 @@ function renderMeeting(state) {
   const hintTitle = document.getElementById("hint-title");
   const hintFact = document.getElementById("hint-fact");
   if (state.current_task) {
-    hintLabel.textContent = "Говорят о задаче";
+    setLabelText(hintLabel, "Говорят о задаче");
     hintTitle.textContent = state.current_task.title;
     hintFact.textContent = state.current_task.first_fact;
   } else {
-    hintLabel.textContent = "Подсказываю";
+    setLabelText(hintLabel, "Подсказываю");
     hintTitle.textContent = "";
     hintFact.textContent = "Подсказка появится, когда узнаю задачу";
   }
@@ -134,6 +138,15 @@ function renderMeeting(state) {
   } else {
     askContent.innerHTML = '<span class="mute">—</span>';
   }
+}
+
+function setLabelText(el, newText) {
+  if (el.textContent === newText) return;
+  el.style.opacity = "0";
+  setTimeout(function () {
+    el.textContent = newText;
+    el.style.opacity = "1";
+  }, 140);
 }
 
 function formatElapsed(seconds) {
