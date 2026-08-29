@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Полоса</title>
+<style>
+  :root {
+    --page-bg: rgba(19,18,23,.86);
+    --line: rgba(255,255,255,.09);
+    --ink: #F2F0EE;
+    --dim: #9C97A3;
+    --mute: #6b6672;
+    --live: #54C77A;
+    --alarm: #E36B6B;
+    --accent-text: #D6C8FF;
+    --accent-bg: rgba(139,92,246,.16);
+    --accent-border: rgba(139,92,246,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: transparent;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  .polosa {
+    width: 1200px; height: 200px;
+    background: var(--page-bg);
+    backdrop-filter: blur(18px);
+    border-radius: 14px;
+    display: flex;
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .zone { padding: 16px 20px; display: flex; flex-direction: column; justify-content: center; }
+  .zone + .zone { border-left: 1px solid var(--line); }
+
+  .zone-control { width: 180px; flex-shrink: 0; }
+  .zone-hear { flex: 1.4; min-width: 0; }
+  .zone-hint { flex: 1.6; min-width: 0; }
+  .zone-ask { width: 260px; flex-shrink: 0; }
+
+  .title { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; margin: 0 0 6px; }
+  .section-label { font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--dim); margin: 0 0 8px; }
+  .body-text { font-size: 15px; font-weight: 400; line-height: 1.45; margin: 0; }
+  .mute { font-size: 12px; font-weight: 500; letter-spacing: 0.01em; color: var(--mute); }
+
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--live);
+    display: inline-block; margin-right: 6px;
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .live-dot { animation: none; opacity: 0.85; }
+  }
+
+  .zone-label {
+    font-size: 13px; font-weight: 600; color: var(--dim);
+    transition: opacity 140ms ease;
+  }
+
+  .ask-pill {
+    background: var(--accent-bg); border: 1px solid var(--accent-border);
+    border-radius: 10px; padding: 10px 12px; color: var(--accent-text);
+    font-size: 14px; line-height: 1.4;
+  }
+
+  .btn {
+    background: var(--ink); color: #111; border: none; border-radius: 8px;
+    padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .btn:active { transform: scale(0.97); }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .polosa { background: #131217; backdrop-filter: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="polosa">
+    <div class="zone zone-control">
+      <div class="mute" id="elapsed">Сегодня, 12:00</div>
+      <div class="mute" id="remaining">осталось —</div>
+      <button class="btn" id="control-btn" style="margin-top:8px;">Начать</button>
+    </div>
+    <div class="zone zone-hear">
+      <div class="zone-label" id="hear-label">Слышу</div>
+      <p class="body-text" id="hear-text">Транскрипт появится, когда начнётся запись</p>
+    </div>
+    <div class="zone zone-hint">
+      <div class="zone-label" id="hint-label">Подсказываю</div>
+      <p class="title" id="hint-title" style="font-size:15px;"></p>
+      <p class="body-text mute" id="hint-fact"></p>
+    </div>
+    <div class="zone zone-ask">
+      <div class="section-label">Спроси</div>
+      <div id="ask-content"><span class="mute">—</span></div>
+    </div>
+  </div>
+
+<script>
+function renderMeeting(state) {
+  document.getElementById("elapsed").textContent = state.phase === "before"
+    ? "Сегодня, 12:00" : formatElapsed(state.elapsed_s);
+  document.getElementById("remaining").textContent = state.phase === "after"
+    ? `не обсудили ${state.remaining_count}` : `осталось ${state.remaining_count}`;
+  document.getElementById("control-btn").textContent = state.phase === "after" ? "Сначала" : "Начать";
+
+  const hearLabel = document.getElementById("hear-label");
+  hearLabel.textContent = (state.last_line && state.last_line.who) || "Слышу";
+  document.getElementById("hear-text").textContent =
+    (state.last_line && state.last_line.text) || "Транскрипт появится, когда начнётся запись";
+
+  const hintLabel = document.getElementById("hint-label");
+  const hintTitle = document.getElementById("hint-title");
+  const hintFact = document.getElementById("hint-fact");
+  if (state.current_task) {
+    hintLabel.textContent = "Говорят о задаче";
+    hintTitle.textContent = state.current_task.title;
+    hintFact.textContent = state.current_task.first_fact;
+  } else {
+    hintLabel.textContent = "Подсказываю";
+    hintTitle.textContent = "";
+    hintFact.textContent = "Подсказка появится, когда узнаю задачу";
+  }
+
+  const askContent = document.getElementById("ask-content");
+  if (state.ask) {
+    askContent.innerHTML = "";
+    const pill = document.createElement("div");
+    pill.className = "ask-pill";
+    pill.textContent = state.ask;
+    askContent.appendChild(pill);
+  } else {
+    askContent.innerHTML = '<span class="mute">—</span>';
+  }
+}
+
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m} мин`;
+}
+
+window.renderMeeting = renderMeeting;
+</script>
+</body>
+</html>
