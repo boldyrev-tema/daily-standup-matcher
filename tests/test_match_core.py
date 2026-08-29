@@ -1,0 +1,130 @@
+from datetime import datetime, timezone
+
+import pytest
+
+from match_core import MatchResult, compute_idf_weights, extract_number_mentions, match, score_task
+from sprint_snapshot import Task, load_sprint
+
+
+def _task(key, title):
+    return Task(
+        key=key,
+        title=title,
+        assignee="Кто-то",
+        status="S",
+        updated_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+
+def test_extract_number_mentions_finds_digit_sequences():
+    assert extract_number_mentions("возьму следующим 412 в работу") == {"412"}
+
+
+def test_extract_number_mentions_ignores_single_digits():
+    assert extract_number_mentions("у меня 1 вопрос") == set()
+
+
+def test_extract_number_mentions_can_find_several():
+    assert extract_number_mentions("сначала 214 потом 201") == {"214", "201"}
+
+
+def test_compute_idf_weights_gives_full_weight_to_unique_words():
+    agenda = [_task("A-1", "Сделки и клиенты"), _task("A-2", "Отчёты и партнёры")]
+    idf = compute_idf_weights(agenda)
+    assert idf["сделка"] == 1.0
+    assert idf["партнёр"] == 1.0
+
+
+def test_compute_idf_weights_discounts_shared_words():
+    agenda = [
+        _task("A-1", "Выгрузка в старую систему"),
+        _task("A-2", "Выгрузка в новую систему"),
+    ]
+    idf = compute_idf_weights(agenda)
+    assert idf["выгрузка"] == 0.5
+    assert idf["система"] == 0.5
+    assert idf["старый"] == 1.0
+
+
+def test_score_task_counts_overlapping_lemmas():
+    task = _task("A-1", "Сделки и клиенты")
+    idf = {"сделка": 1.0, "клиент": 1.0}
+    score, count = score_task(["сделка", "клиент", "погода"], task, idf)
+    assert count == 2
+    assert score == 2.0
+
+
+def test_score_task_discounts_stopword_but_does_not_zero_it():
+    task = _task("A-1", "Выгрузка там")
+    idf = {"выгрузка": 1.0, "там": 1.0}
+    score_with_filler, count_with = score_task(["выгрузка", "там"], task, idf)
+    score_without_filler, count_without = score_task(["выгрузка"], task, idf)
+    assert count_with == 2
+    assert count_without == 1
+    assert score_without_filler < score_with_filler < score_without_filler + idf["там"]
+
+
+AGENDA = load_sprint("fixtures/sprint.json")
+
+
+def test_case1_explicit_number_matches_by_digits_alone():
+    results = match("ладно возьму 214 в работу", AGENDA)
+    assert [r.task_key for r in results] == ["NOVA-10214"]
+    assert results[0].reason == "explicit_number"
+
+
+def test_case2_exact_title_word_match():
+    results = match("коллеги, там синхронизация остатков склада ещё не готова", AGENDA)
+    assert [r.task_key for r in results] == ["NOVA-10299"]
+    assert results[0].reason == "title_words"
+
+
+def test_case3_regression_word_form_mismatch_from_rinats_bug():
+    results = match(
+        "разобралась наконец с карточками клиентов, там в сделке была путаница",
+        AGENDA,
+    )
+    assert [r.task_key for r in results] == ["NOVA-10201"]
+    assert results[0].reason == "title_words"
+
+
+def test_case3b_second_regression_found_watching_the_full_demo():
+    results = match("готова функциональная заявка для поставщиков", AGENDA)
+    assert [r.task_key for r in results] == ["NOVA-10230"]
+    assert results[0].reason == "title_words"
+
+
+def test_case4_single_overlapping_word_is_not_enough():
+    results = match("короче там ждём поставщиков ещё", AGENDA)
+    assert results == []
+
+
+def test_case6_multiple_tasks_in_one_utterance_newest_first():
+    results = match(
+        "разобралась наконец с карточками клиентов, там в сделке была "
+        "путаница, и ещё возьму 214",
+        AGENDA,
+    )
+    assert [r.task_key for r in results] == ["NOVA-10214", "NOVA-10201"]
+    assert results[0].reason == "explicit_number"
+    assert results[1].reason == "title_words"
+
+
+def test_case7_pure_filler_utterance_matches_nothing():
+    results = match("ну короче вот как бы", AGENDA)
+    assert results == []
+
+
+def test_case8_ambiguous_tie_between_two_similar_tasks():
+    results = match("надо доделать выгрузку контактов в систему", AGENDA)
+    assert results == []
+
+
+def test_case9_unrelated_smalltalk_matches_nothing():
+    results = match("пойдём после созвона поедим, кто что хочет", AGENDA)
+    assert results == []
+
+
+def test_case10_empty_agenda_raises_instead_of_silently_matching_nothing():
+    with pytest.raises(ValueError):
+        match("что угодно", [])
