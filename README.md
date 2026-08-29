@@ -37,12 +37,25 @@ venv/bin/python3 -m pytest -v
   mention more than one task.
 - `fixtures/sprint.json` — 6 invented tasks (no real Tranio data) covering
   every test case in the spec, including two live-bug regression cases.
+- `facts.py` — deterministic 2-5 line Jira-fact builder from a `Task`.
+- `meeting.py` — `Line`/`Meeting` state: recognized-task tracking, progressive
+  one-at-a-time reveal of LLM "said" lines.
+- `hints.py` — real Groq call for the "Сказали"/"Спроси" LLM layer, strict
+  JSON contract, degrades to empty on timeout/error (never crashes the replay).
+- `credentials.py` — reads `KEY=value` lines from a `~/.credentials/*.env`
+  file (same tiny pattern as this author's `meeting_copilot` project).
+- `replay_driver.py` — turns an invented sample transcript into a finished
+  `Meeting` (used by the integration test; no pacing, no LLM calls).
+- `run_polosa_replay.py` — the real thing: opens a pywebview "Полоса" window
+  and plays `fixtures/sample_daily_transcript.json` with realistic pauses and
+  real Groq calls. Needs `~/.credentials/groq_api_key.env` (`GROQ_API_KEY=...`).
+- `polosa.html` — the overlay page itself, techspec style tokens + apple-design
+  restrained motion.
 
-## Known gaps (see spec for full list)
+## Known gaps in this iteration
 
-Not implemented in this slice: any UI, `live_copilot_poc` integration, real
-Jira access, speaker diarization, the LLM layer, or delay measurement on a
-real daily. The stopword list is a reconstruction (Rinat's real 142-word
-list isn't available); the alarm/sort criteria and the number-format
-behavior *are* the real spec's, confirmed against the primary source and a
-live demo playback.
+Not implemented: live microphone / Speechmatics STT (still reads an invented
+transcript file), real Jira snapshot (still `fixtures/sprint.json`), speaker
+diarization, `hit_words` transcript underlining, the Начать/Сначала button's
+click handler (the replay auto-starts instead — see
+`docs/superpowers/specs/2026-08-29-polosa-replay-design.md` for why).
