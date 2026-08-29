@@ -36,7 +36,7 @@
 **Interfaces:**
 - Produces: `Task` dataclass (`key: str`, `title: str`, `assignee: str`, `status: str`, `updated_at: datetime`) — every later task imports this. `load_sprint(path: str) -> list[Task]`.
 
-- [ ] **Step 1: Write `.gitignore` and `requirements.txt`**
+- [x] **Step 1: Write `.gitignore` and `requirements.txt`**
 
 `.gitignore`:
 ```
@@ -53,7 +53,7 @@ pymorphy3-dicts-ru
 pytest
 ```
 
-- [ ] **Step 2: Create/confirm the venv and install dependencies**
+- [x] **Step 2: Create/confirm the venv and install dependencies**
 
 Run:
 ```bash
@@ -63,7 +63,7 @@ venv/bin/pip install -r requirements.txt
 ```
 Expected: installs succeed, no errors (already verified working on this machine's Python 3.14 during spec research).
 
-- [ ] **Step 3: Write the fixture data — `fixtures/sprint.json`**
+- [x] **Step 3: Write the fixture data — `fixtures/sprint.json`**
 
 Six invented tasks, none copied from real Tranio data. Keys share a fictional project prefix (`NOVA`) and have unique 3-digit suffixes (used later by the number-channel tests). Statuses/assignees are placeholders — the interesting content is the titles and dates, both needed by later tasks.
 
@@ -114,7 +114,7 @@ Six invented tasks, none copied from real Tranio data. Keys share a fictional pr
 ]
 ```
 
-- [ ] **Step 4: Write the failing test**
+- [x] **Step 4: Write the failing test**
 
 `tests/test_sprint_snapshot.py`:
 ```python
@@ -145,12 +145,12 @@ def test_task_is_a_plain_dataclass():
     assert t.key == "X-1"
 ```
 
-- [ ] **Step 5: Run test to verify it fails**
+- [x] **Step 5: Run test to verify it fails**
 
 Run: `venv/bin/python3 -m pytest tests/test_sprint_snapshot.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'sprint_snapshot'`
 
-- [ ] **Step 6: Write minimal implementation**
+- [x] **Step 6: Write minimal implementation**
 
 `sprint_snapshot.py`:
 ```python
@@ -183,12 +183,12 @@ def load_sprint(path: str) -> list[Task]:
     ]
 ```
 
-- [ ] **Step 7: Run test to verify it passes**
+- [x] **Step 7: Run test to verify it passes**
 
 Run: `venv/bin/python3 -m pytest tests/test_sprint_snapshot.py -v`
 Expected: 2 passed
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add .gitignore requirements.txt sprint_snapshot.py fixtures/sprint.json tests/test_sprint_snapshot.py
@@ -207,7 +207,7 @@ git commit -m "Add sprint_snapshot.py: Task model + fixture loader, with synthet
 - Consumes: nothing.
 - Produces: `STOPWORDS: frozenset[str]`, `stopword_discount(word: str) -> float` — used by `match_core.score_task` in Task 5.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_stopwords.py`:
 ```python
@@ -230,12 +230,12 @@ def test_stopword_list_is_reasonably_sized():
     assert len(STOPWORDS) >= 15
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `venv/bin/python3 -m pytest tests/test_stopwords.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'stopwords'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `stopwords.py`:
 ```python
@@ -253,12 +253,12 @@ def stopword_discount(word: str) -> float:
     return 1 / 3 if word in STOPWORDS else 1.0
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `venv/bin/python3 -m pytest tests/test_stopwords.py -v`
 Expected: 3 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add stopwords.py tests/test_stopwords.py
@@ -277,7 +277,7 @@ git commit -m "Add stopwords.py: discount-based background word weighting"
 - Consumes: `pymorphy3.MorphAnalyzer`.
 - Produces: `lemmatize(tokens: list[str]) -> list[str]` — used by `match_core.py` in Tasks 5-6.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_lemmatize.py`:
 ```python
@@ -310,12 +310,12 @@ def test_lemmatize_preserves_token_order_and_count():
     assert lemmatize(["карточками", "клиентов"]) == ["карточка", "клиент"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `venv/bin/python3 -m pytest tests/test_lemmatize.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'lemmatize'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `lemmatize.py`:
 ```python
@@ -328,12 +328,12 @@ def lemmatize(tokens: list[str]) -> list[str]:
     return [_morph.parse(token)[0].normal_form for token in tokens]
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `venv/bin/python3 -m pytest tests/test_lemmatize.py -v`
 Expected: 4 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lemmatize.py tests/test_lemmatize.py
@@ -352,7 +352,7 @@ git commit -m "Add lemmatize.py: pymorphy3 wrapper, verified against Rinat's doc
 - Consumes: `sprint_snapshot.Task`.
 - Produces: `build_agenda(tasks: list[Task], team: list[str]) -> list[Task]`, `pick_alarm(agenda: list[Task], now: datetime | None = None) -> Task | None`, constants `REOPENED_STATUS`, `STALE_DAYS`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_agenda.py`:
 ```python
@@ -419,12 +419,12 @@ def test_pick_alarm_none_when_nothing_qualifies():
     assert pick_alarm([fresh1, fresh2], now=NOW) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `venv/bin/python3 -m pytest tests/test_agenda.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'agenda'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `agenda.py`:
 ```python
@@ -459,12 +459,12 @@ def pick_alarm(agenda: list[Task], now: datetime | None = None) -> Task | None:
     return None
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `venv/bin/python3 -m pytest tests/test_agenda.py -v`
 Expected: 6 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agenda.py tests/test_agenda.py
@@ -485,7 +485,7 @@ git commit -m "Add agenda.py: team filter + recency sort + single-pick alarm"
 
 This task covers the pieces `match()` (Task 6) is built from, tested in isolation so failures are easy to localize.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_match_core.py` (this file grows again in Task 6 — start it here):
 ```python
@@ -557,12 +557,12 @@ def test_score_task_discounts_stopword_but_does_not_zero_it():
     assert score_without_filler < score_with_filler < score_without_filler + idf["там"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `venv/bin/python3 -m pytest tests/test_match_core.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'match_core'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `match_core.py`:
 ```python
@@ -606,12 +606,12 @@ def score_task(
     return score, len(overlap)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `venv/bin/python3 -m pytest tests/test_match_core.py -v`
 Expected: 7 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add match_core.py tests/test_match_core.py
@@ -632,7 +632,7 @@ git commit -m "Add match_core.py scoring primitives: number extraction, IDF weig
 
 This task also directly implements every numbered case in the spec's "Тестирование" section (1, 2, 3, 3b, 4, 6, 7, 8, 9, 10 — cases 5, 11, 12 were already covered in Tasks 5 and 4).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/test_match_core.py`:
 ```python
@@ -714,12 +714,12 @@ def test_case10_empty_agenda_raises_instead_of_silently_matching_nothing():
         match("что угодно", [])
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `venv/bin/python3 -m pytest tests/test_match_core.py -v`
 Expected: FAIL — `ImportError: cannot import name 'MatchResult' from 'match_core'` (and/or `match`)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `match_core.py`:
 ```python
@@ -777,12 +777,12 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
     return results
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `venv/bin/python3 -m pytest tests/test_match_core.py -v`
 Expected: 17 passed (7 from Task 5 + 10 new)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add match_core.py tests/test_match_core.py
@@ -799,7 +799,7 @@ git commit -m "Add match(): number + word channels, silence-when-unsure gate, al
 **Interfaces:**
 - Consumes: nothing new — this task only documents and verifies what Tasks 1-6 built.
 
-- [ ] **Step 1: Write `README.md`**
+- [x] **Step 1: Write `README.md`**
 
 ```markdown
 # daily_standup_matcher
@@ -852,12 +852,12 @@ behavior *are* the real spec's, confirmed against the primary source and a
 live demo playback.
 ```
 
-- [ ] **Step 2: Run the full test suite**
+- [x] **Step 2: Run the full test suite**
 
 Run: `venv/bin/python3 -m pytest -v`
 Expected: all tests across all 6 test files pass (33 total: 2 + 3 + 4 + 6 + 7 + 10 from Tasks 1-6 — re-count after Task 6's actual run and adjust this number if it drifted during implementation).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md
