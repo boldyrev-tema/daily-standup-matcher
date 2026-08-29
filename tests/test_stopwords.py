@@ -13,3 +13,11 @@ def test_content_word_gets_full_weight():
 
 def test_stopword_list_is_reasonably_sized():
     assert len(STOPWORDS) >= 15
+
+
+def test_common_function_words_are_covered():
+    # Found missing on a real-transcript validation run (29 aug 2026): "и" + "с" alone
+    # passed the >=2-word overlap gate in match_core.match() and produced a false
+    # positive, because neither was discounted as a stopword.
+    for word in ("и", "с", "на", "не", "что", "но", "за", "у", "к", "по", "от", "из"):
+        assert word in STOPWORDS, f"{word!r} should be a stopword"
