@@ -31,7 +31,7 @@
     overflow: hidden;
   }
   .zone { padding: 16px 20px; display: flex; flex-direction: column; justify-content: center; }
-  .zone + .zone { border-left: 1px solid var(--line); }
+  .zone:nth-child(even) { background: rgba(255,255,255,.02); }
 
   .zone-control { width: 180px; flex-shrink: 0; }
   .zone-hear { flex: 1.4; min-width: 0; }
@@ -65,7 +65,7 @@
   }
 
   .btn {
-    background: var(--ink); color: #111; border: none; border-radius: 8px;
+    background: var(--ink); color: #111; border: none; border-radius: 999px;
     padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
   }
   .btn:active { transform: scale(0.97); }
