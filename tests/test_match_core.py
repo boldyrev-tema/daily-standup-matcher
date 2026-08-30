@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from match_core import MatchResult, compute_idf_weights, extract_number_mentions, match, score_task
+from match_core import MatchResult, _hit_words, compute_idf_weights, extract_number_mentions, match, score_task
 from sprint_snapshot import Task, load_sprint
 
 
@@ -128,3 +128,47 @@ def test_case9_unrelated_smalltalk_matches_nothing():
 def test_case10_empty_agenda_raises_instead_of_silently_matching_nothing():
     with pytest.raises(ValueError):
         match("что угодно", [])
+
+
+def test_hit_words_uses_original_tokens_not_lemmas():
+    tokens = ["сделок", "было", "много"]
+    lemmas = ["сделка", "быть", "много"]
+    title_lemmas = {"сделка", "клиент"}
+    assert _hit_words(tokens, lemmas, title_lemmas) == ["сделок"]
+
+
+def test_hit_words_dedups_repeated_lemma():
+    tokens = ["сделка", "и", "сделке"]
+    lemmas = ["сделка", "и", "сделка"]
+    title_lemmas = {"сделка"}
+    assert _hit_words(tokens, lemmas, title_lemmas) == ["сделка"]
+
+
+def test_hit_words_preserves_order_of_appearance():
+    tokens = ["клиент", "и", "сделка"]
+    lemmas = ["клиент", "и", "сделка"]
+    title_lemmas = {"сделка", "клиент"}
+    assert _hit_words(tokens, lemmas, title_lemmas) == ["клиент", "сделка"]
+
+
+def test_hit_words_no_false_hits_on_non_overlapping_words():
+    tokens = ["погода", "сегодня", "хорошая"]
+    lemmas = ["погода", "сегодня", "хороший"]
+    title_lemmas = {"сделка"}
+    assert _hit_words(tokens, lemmas, title_lemmas) == []
+
+
+def test_match_result_hit_words_for_explicit_number():
+    results = match("ладно возьму 214 в работу", AGENDA)
+    assert results[0].hit_words == ["214"]
+
+
+def test_match_result_hit_words_for_title_words():
+    results = match("коллеги, там синхронизация остатков склада ещё не готова", AGENDA)
+    assert results[0].task_key == "NOVA-10299"
+    assert results[0].hit_words == ["синхронизация", "остатков", "склада"]
+
+
+def test_match_result_hit_words_empty_when_no_match():
+    results = match("ну короче вот как бы", AGENDA)
+    assert results == []

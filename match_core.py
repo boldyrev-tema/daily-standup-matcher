@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from lemmatize import lemmatize
 from sprint_snapshot import Task
@@ -43,11 +43,22 @@ def score_task(
     return score, len(overlap)
 
 
+def _hit_words(tokens: list[str], lemmas: list[str], title_lemmas: set[str]) -> list[str]:
+    seen: set[str] = set()
+    hits: list[str] = []
+    for token, lemma in zip(tokens, lemmas):
+        if lemma in title_lemmas and lemma not in seen:
+            seen.add(lemma)
+            hits.append(token)
+    return hits
+
+
 @dataclass(frozen=True)
 class MatchResult:
     task_key: str
     confidence: float
     reason: str
+    hit_words: list[str] = field(default_factory=list)
 
 
 def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
@@ -55,7 +66,8 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
         raise ValueError("agenda must not be empty")
 
     idf = compute_idf_weights(agenda)
-    utterance_lemmas = lemmatize(_tokenize(utterance))
+    tokens = _tokenize(utterance)
+    utterance_lemmas = lemmatize(tokens)
     mentioned_numbers = extract_number_mentions(utterance)
 
     results: list[MatchResult] = []
@@ -67,7 +79,7 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
             is_full_match = number == key_digits
             is_suffix_match = len(number) >= 3 and key_digits.endswith(number)
             if is_full_match or is_suffix_match:
-                results.append(MatchResult(task.key, 1.0, "explicit_number"))
+                results.append(MatchResult(task.key, 1.0, "explicit_number", hit_words=[number]))
                 matched_keys.add(task.key)
                 break
 
@@ -83,7 +95,9 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
         top_task, top_score = scored[0]
         runner_up_score = scored[1][1] if len(scored) > 1 else 0.0
         if top_score - runner_up_score >= REQUIRED_MARGIN:
-            results.append(MatchResult(top_task.key, top_score, "title_words"))
+            title_lemmas = set(lemmatize(_tokenize(top_task.title)))
+            hit_words = _hit_words(tokens, utterance_lemmas, title_lemmas)
+            results.append(MatchResult(top_task.key, top_score, "title_words", hit_words=hit_words))
 
     task_by_key = {t.key: t for t in agenda}
     results.sort(key=lambda r: task_by_key[r.task_key].updated_at, reverse=True)
