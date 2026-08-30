@@ -47,7 +47,7 @@ def _hit_words(tokens: list[str], lemmas: list[str], title_lemmas: set[str]) -> 
     seen: set[str] = set()
     hits: list[str] = []
     for token, lemma in zip(tokens, lemmas):
-        if lemma in title_lemmas and lemma not in seen:
+        if lemma in title_lemmas and lemma not in seen and stopword_discount(lemma) >= 1.0:
             seen.add(lemma)
             hits.append(token)
     return hits
@@ -58,7 +58,7 @@ class MatchResult:
     task_key: str
     confidence: float
     reason: str
-    hit_words: list[str] = field(default_factory=list)
+    hit_words: list[str] = field(default_factory=list, hash=False)
 
 
 def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:

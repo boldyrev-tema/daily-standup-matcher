@@ -100,6 +100,8 @@ def _run_replay(window):
             meeting.add_line(Line(t=t, who=turn["speaker"], text=turn["text"], task=task_key, hit_words=hit_words))
             for r in results:
                 meeting.mark_recognized(r.task_key)
+            if primary:
+                meeting.current = primary.task_key
 
             window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
 

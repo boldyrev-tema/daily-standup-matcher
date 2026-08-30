@@ -172,3 +172,28 @@ def test_match_result_hit_words_for_title_words():
 def test_match_result_hit_words_empty_when_no_match():
     results = match("ну короче вот как бы", AGENDA)
     assert results == []
+
+
+def test_hit_words_excludes_stopwords_regression_from_real_fixture():
+    """Reproduces the real shipped-fixture bug: turn 1 of
+    fixtures/sample_daily_transcript.json ("...дубли платежей от
+    партнёров.") used to include the preposition "от" in hit_words, which
+    then underlined the middle of the unrelated word "готовы" in the
+    second-screen UI (unanchored substring match). "от" is a stopword lemma
+    and must never appear in hit_words.
+    """
+    results = match(
+        "Отчёты почти готовы, убираем последние дубли платежей от партнёров.",
+        AGENDA,
+    )
+    assert [r.task_key for r in results] == ["NOVA-10214"]
+    assert results[0].reason == "title_words"
+    assert "от" not in results[0].hit_words
+    assert results[0].hit_words == ["отчёты", "убираем", "дубли", "платежей", "партнёров"]
+
+
+def test_hit_words_excludes_stopword_lemma_directly():
+    tokens = ["сделка", "от", "клиент"]
+    lemmas = ["сделка", "от", "клиент"]
+    title_lemmas = {"сделка", "от", "клиент"}
+    assert _hit_words(tokens, lemmas, title_lemmas) == ["сделка", "клиент"]
