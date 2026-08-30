@@ -52,10 +52,18 @@ venv/bin/python3 -m pytest -v
 - `polosa.html` — the overlay page itself, techspec style tokens + apple-design
   restrained motion.
 
+- `second_screen.html` + `run_second_screen.py` — the "второй экран" full three-
+  column view (Слышу / Записал / Подсказываю), same pywebview approach and real
+  Groq call as "Полоса", but rendering the complete `Meeting` state: full
+  scrolling transcript with underlined `hit_words` and "→ KEY" tags, the full
+  agenda split by phase with the alarm row in red, all 5 Jira facts, and the
+  progressive "Сказали" reveal that "Полоса" computed but never displayed.
+
 ## Known gaps in this iteration
 
 Not implemented: live microphone / Speechmatics STT (still reads an invented
 transcript file), real Jira snapshot (still `fixtures/sprint.json`), speaker
-diarization, `hit_words` transcript underlining, the Начать/Сначала button's
-click handler (the replay auto-starts instead — see
+diarization, the "Колонка" placement (third physical layout — same data,
+different template, not built yet), the Начать/Сначала button's click handler
+on "Полоса" (the replay auto-starts instead — see
 `docs/superpowers/specs/2026-08-29-polosa-replay-design.md` for why).
