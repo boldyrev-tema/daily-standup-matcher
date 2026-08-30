@@ -135,6 +135,7 @@ function renderHeard(state) {
   document.getElementById("live-dot").style.display = state.phase === "live" ? "inline-block" : "none";
 
   const wasNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 24;
+  const previousScrollTop = container.scrollTop;
   container.innerHTML = "";
   state.lines.forEach(line => {
     const row = document.createElement("div");
@@ -151,6 +152,8 @@ function renderHeard(state) {
   });
   if (wasNearBottom) {
     container.scrollTop = container.scrollHeight;
+  } else {
+    container.scrollTop = previousScrollTop;
   }
 }
 
@@ -192,7 +195,7 @@ function renderRecorded(state) {
     container.appendChild(buildAgendaSection("Повестка", state.agenda.remaining));
     return;
   }
-  if (state.agenda.done.length > 0) {
+  if (state.agenda.done.length > 0 || state.phase === "after") {
     container.appendChild(buildAgendaSection("Обсудили", state.agenda.done));
   }
   const secondLabel = state.phase === "after" ? "Не обсудили" : "Осталось";
