@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sprint_snapshot import Task
-from facts import build_facts
+from agenda import REOPENED_STATUS
+from facts import age_label, agenda_row, build_facts
 
 NOW = datetime(2026, 8, 29, 9, 0, tzinfo=timezone.utc)
 
@@ -77,3 +78,38 @@ def test_age_label_today_vs_days_ago():
     assert build_facts(two_days_ago, now=NOW)[-1] == "Обновлено 2 дня назад"
     five_days_ago = _task(updated_at=datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc))
     assert build_facts(five_days_ago, now=NOW)[-1] == "Обновлено 5 дней назад"
+
+
+def test_age_label_is_public_and_matches_build_facts_wording():
+    assert age_label(datetime(2026, 8, 28, 9, 0, tzinfo=timezone.utc), NOW) == "Обновлено вчера"
+    assert age_label(NOW, NOW) == "Обновлено сегодня"
+
+
+def test_agenda_row_basic_line_no_alarm():
+    row, annotation = agenda_row(_task(), is_alarm=False, now=NOW)
+    assert row == "В работе · Дарья Ковалёва · Обновлено вчера"
+    assert annotation is None
+
+
+def test_agenda_row_alarm_and_reopened_gets_annotation():
+    task = _task(status=REOPENED_STATUS)
+    row, annotation = agenda_row(task, is_alarm=True, now=NOW)
+    assert row == f"{REOPENED_STATUS} · Дарья Ковалёва · Обновлено вчера"
+    assert annotation == "задачу открыли повторно"
+
+
+def test_agenda_row_alarm_but_not_reopened_gets_no_annotation():
+    # is_alarm=True can also mean "stale >= 4 days", which has no separate
+    # annotation in the real mockup — only the reopened case does.
+    task = _task(status="В работе")
+    row, annotation = agenda_row(task, is_alarm=True, now=NOW)
+    assert annotation is None
+
+
+def test_agenda_row_reopened_but_not_the_alarm_task_gets_no_annotation():
+    # is_alarm is decided by the caller against agenda.pick_alarm() for the
+    # whole agenda — a merely-reopened task that isn't THE alarm task must
+    # not get the annotation on its own.
+    task = _task(status=REOPENED_STATUS)
+    row, annotation = agenda_row(task, is_alarm=False, now=NOW)
+    assert annotation is None
