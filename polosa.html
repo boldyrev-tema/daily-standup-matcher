@@ -152,7 +152,7 @@ function setLabelText(el, newText) {
 function formatElapsed(seconds) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${m} мин`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 window.renderMeeting = renderMeeting;
