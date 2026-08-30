@@ -8,6 +8,7 @@ class Line:
     who: str | None
     text: str
     task: str | None = None
+    hit_words: list[str] = field(default_factory=list)
 
 
 @dataclass

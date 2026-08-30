@@ -55,3 +55,13 @@ def test_reveal_next_said_grows_one_at_a_time():
     assert m.said == ["a", "b", "c"]
     assert m.reveal_next_said() is False
     assert m.said == ["a", "b", "c"]
+
+
+def test_line_hit_words_defaults_to_empty_list():
+    line = Line(t=1.0, who="Дарья", text="привет")
+    assert line.hit_words == []
+
+
+def test_line_hit_words_can_be_set():
+    line = Line(t=1.0, who="Дарья", text="возьму 214 в работу", task="NOVA-10214", hit_words=["214"])
+    assert line.hit_words == ["214"]
