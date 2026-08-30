@@ -31,9 +31,17 @@
     body { background: #131217; backdrop-filter: none; }
   }
 
-  .app { display: flex; flex-direction: column; height: 100vh; overflow-y: auto; }
+  .app { display: flex; flex-direction: column; height: calc(100vh - 33px); overflow-y: auto; }
   .section { padding: 16px 20px; }
   .section + .section { border-top: 1px solid var(--line); }
+
+  .footer {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 10px 20px; text-align: center;
+    font-size: 12px; color: var(--mute);
+    border-top: 1px solid var(--line);
+    background: var(--page-bg);
+  }
 
   .header { display: flex; align-items: center; gap: 6px; }
   .header .mute { font-size: 12px; font-weight: 500; letter-spacing: 0.01em; color: var(--mute); }
@@ -72,6 +80,7 @@
   .agenda-row-annotation { font-size: 12px; color: var(--alarm); margin-top: 2px; font-weight: 600; }
   .agenda-row.alarm .agenda-row-title,
   .agenda-row.alarm .agenda-row-fact { color: var(--alarm); }
+  .agenda-section.dimmed .agenda-row:not(.alarm) { opacity: .5; }
 
   .hint-title { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; margin: 10px 0 12px; }
   .hint-block { margin-bottom: 16px; }
@@ -117,6 +126,7 @@
       <div id="heard-lines"><p class="body-text mute">Транскрипт появится, когда начнётся запись</p></div>
     </div>
   </div>
+  <div class="footer">В Jira ничего не изменено</div>
 
 <script>
 function escapeHtml(s) {
@@ -194,9 +204,9 @@ function buildAgendaRow(r) {
   return row;
 }
 
-function buildAgendaSection(label, rows) {
+function buildAgendaSection(label, rows, dimmed) {
   const section = document.createElement("div");
-  section.className = "agenda-section";
+  section.className = "agenda-section" + (dimmed ? " dimmed" : "");
   const heading = document.createElement("div");
   heading.className = "section-label";
   heading.textContent = label;
@@ -209,14 +219,14 @@ function renderRecorded(state) {
   const container = document.getElementById("recorded-sections");
   container.innerHTML = "";
   if (state.phase === "before") {
-    container.appendChild(buildAgendaSection("Повестка", state.agenda.remaining));
+    container.appendChild(buildAgendaSection("Повестка", state.agenda.remaining, true));
     return;
   }
   if (state.agenda.done.length > 0 || state.phase === "after") {
-    container.appendChild(buildAgendaSection("Обсудили", state.agenda.done));
+    container.appendChild(buildAgendaSection("Обсудили", state.agenda.done, false));
   }
   const secondLabel = state.phase === "after" ? "Не обсудили" : "Осталось";
-  container.appendChild(buildAgendaSection(secondLabel, state.agenda.remaining));
+  container.appendChild(buildAgendaSection(secondLabel, state.agenda.remaining, true));
 }
 
 function renderHints(state) {
