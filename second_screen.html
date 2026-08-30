@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Второй экран</title>
+<style>
+  :root {
+    --page-bg: rgba(19,18,23,.86);
+    --line: rgba(255,255,255,.09);
+    --ink: #F2F0EE;
+    --dim: #9C97A3;
+    --mute: #6b6672;
+    --live: #54C77A;
+    --alarm: #E36B6B;
+    --accent-text: #D6C8FF;
+    --accent-bg: rgba(139,92,246,.16);
+    --accent-border: rgba(139,92,246,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: transparent;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body {
+    background: var(--page-bg);
+    backdrop-filter: blur(18px);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    body { background: #131217; backdrop-filter: none; }
+  }
+
+  .app { display: flex; height: 100vh; }
+
+  .col { padding: 20px; overflow-y: auto; }
+  .col + .col { border-left: 1px solid var(--line); }
+  .col-heard { width: 330px; flex-shrink: 0; }
+  .col-recorded { flex: 1; min-width: 0; }
+  .col-hints { width: 340px; flex-shrink: 0; }
+
+  .col-header { display: flex; align-items: center; margin: 0 0 14px; }
+  .section-label {
+    font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--dim);
+  }
+  .body-text { font-size: 15px; font-weight: 400; line-height: 1.45; margin: 0; }
+  .mute { color: var(--mute); }
+
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--live);
+    display: inline-block; margin-right: 6px;
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .live-dot { animation: none; opacity: 0.85; }
+  }
+
+  .heard-line { margin-bottom: 16px; }
+  .heard-who { font-size: 12px; font-weight: 600; color: var(--dim); margin-bottom: 4px; }
+  .heard-line .hit {
+    text-decoration: underline dotted;
+    text-decoration-color: var(--dim);
+  }
+
+  .agenda-section { margin-bottom: 20px; }
+  .agenda-section .section-label { margin-bottom: 10px; }
+  .agenda-row { margin-bottom: 12px; }
+  .agenda-row-title { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .agenda-row-fact { font-size: 13px; color: var(--mute); margin-top: 2px; }
+  .agenda-row-annotation { font-size: 12px; color: var(--alarm); margin-top: 2px; font-weight: 600; }
+  .agenda-row.alarm .agenda-row-title,
+  .agenda-row.alarm .agenda-row-fact { color: var(--alarm); }
+
+  .hint-title { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; margin: 12px 0 12px; }
+  .hint-block { margin-bottom: 18px; }
+  .hint-block .section-label { margin-bottom: 8px; }
+  .hint-block p { margin: 0 0 4px; }
+
+  .ask-pill {
+    background: var(--accent-bg); border: 1px solid var(--accent-border);
+    border-radius: 10px; padding: 10px 12px; color: var(--accent-text);
+    font-size: 14px; line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="col col-heard">
+      <div class="col-header">
+        <span class="live-dot" id="live-dot" style="display:none;"></span>
+        <span class="section-label">Слышу</span>
+      </div>
+      <div id="heard-lines"></div>
+    </div>
+    <div class="col col-recorded">
+      <div class="col-header"><span class="section-label">Записал</span></div>
+      <div id="recorded-sections"></div>
+    </div>
+    <div class="col col-hints">
+      <div class="col-header"><span class="section-label">Подсказываю</span></div>
+      <p class="hint-title" id="hint-title"></p>
+      <div class="hint-block">
+        <div class="section-label">В Jira</div>
+        <div id="hint-facts"></div>
+      </div>
+      <div class="hint-block">
+        <div class="section-label">Сказали</div>
+        <div id="hint-said"></div>
+      </div>
+      <div class="hint-block">
+        <div class="section-label">Спроси</div>
+        <div id="hint-ask"><span class="mute">—</span></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function underlineHtml(text, hitWords) {
+  const escaped = escapeHtml(text);
+  if (!hitWords || hitWords.length === 0) return escaped;
+  const pattern = hitWords
+    .map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const re = new RegExp("(" + pattern + ")", "gi");
+  return escaped.replace(re, '<span class="hit">$1</span>');
+}
+
+function renderHeard(state) {
+  const container = document.getElementById("heard-lines");
+  document.getElementById("live-dot").style.display = state.phase === "live" ? "inline-block" : "none";
+
+  const wasNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 24;
+  container.innerHTML = "";
+  state.lines.forEach(line => {
+    const row = document.createElement("div");
+    row.className = "heard-line";
+    const who = document.createElement("div");
+    who.className = "heard-who";
+    who.textContent = line.task ? `${line.who || "?"} → ${line.task}` : (line.who || "?");
+    const text = document.createElement("p");
+    text.className = "body-text";
+    text.innerHTML = underlineHtml(line.text, line.hit_words);
+    row.appendChild(who);
+    row.appendChild(text);
+    container.appendChild(row);
+  });
+  if (wasNearBottom) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function buildAgendaRow(r) {
+  const row = document.createElement("div");
+  row.className = "agenda-row" + (r.alarm ? " alarm" : "");
+  const title = document.createElement("div");
+  title.className = "agenda-row-title";
+  title.textContent = `${r.title} · ${r.key}`;
+  const fact = document.createElement("div");
+  fact.className = "agenda-row-fact";
+  fact.textContent = r.row;
+  row.appendChild(title);
+  row.appendChild(fact);
+  if (r.annotation) {
+    const ann = document.createElement("div");
+    ann.className = "agenda-row-annotation";
+    ann.textContent = r.annotation;
+    row.appendChild(ann);
+  }
+  return row;
+}
+
+function buildAgendaSection(label, rows) {
+  const section = document.createElement("div");
+  section.className = "agenda-section";
+  const heading = document.createElement("div");
+  heading.className = "section-label";
+  heading.textContent = label;
+  section.appendChild(heading);
+  rows.forEach(r => section.appendChild(buildAgendaRow(r)));
+  return section;
+}
+
+function renderRecorded(state) {
+  const container = document.getElementById("recorded-sections");
+  container.innerHTML = "";
+  if (state.phase === "before") {
+    container.appendChild(buildAgendaSection("Повестка", state.agenda.remaining));
+    return;
+  }
+  if (state.agenda.done.length > 0) {
+    container.appendChild(buildAgendaSection("Обсудили", state.agenda.done));
+  }
+  const secondLabel = state.phase === "after" ? "Не обсудили" : "Осталось";
+  container.appendChild(buildAgendaSection(secondLabel, state.agenda.remaining));
+}
+
+function renderHints(state) {
+  const titleEl = document.getElementById("hint-title");
+  const factsEl = document.getElementById("hint-facts");
+  const saidEl = document.getElementById("hint-said");
+  const askEl = document.getElementById("hint-ask");
+
+  if (!state.current_task) {
+    titleEl.textContent = "";
+    factsEl.innerHTML = "";
+    saidEl.innerHTML = "";
+    askEl.innerHTML = '<span class="mute">Подсказка появится, когда узнаю задачу</span>';
+    return;
+  }
+
+  titleEl.textContent = state.current_task.title;
+
+  factsEl.innerHTML = "";
+  state.current_task.facts.forEach(f => {
+    const p = document.createElement("p");
+    p.className = "body-text mute";
+    p.textContent = f;
+    factsEl.appendChild(p);
+  });
+
+  saidEl.innerHTML = "";
+  if (state.current_task.said.length === 0) {
+    saidEl.innerHTML = '<span class="mute">—</span>';
+  } else {
+    state.current_task.said.forEach(s => {
+      const p = document.createElement("p");
+      p.className = "body-text";
+      p.textContent = "– " + s;
+      saidEl.appendChild(p);
+    });
+  }
+
+  if (state.current_task.ask) {
+    askEl.innerHTML = "";
+    const pill = document.createElement("div");
+    pill.className = "ask-pill";
+    pill.textContent = state.current_task.ask;
+    askEl.appendChild(pill);
+  } else {
+    askEl.innerHTML = '<span class="mute">—</span>';
+  }
+}
+
+function renderMeeting(state) {
+  renderHeard(state);
+  renderRecorded(state);
+  renderHints(state);
+}
+
+window.renderMeeting = renderMeeting;
+</script>
+</body>
+</html>
