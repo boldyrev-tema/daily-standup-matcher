@@ -113,6 +113,27 @@ def test_case4_single_overlapping_word_is_not_enough():
     assert results == []
 
 
+def test_case12_latin_title_word_recognized_via_cyrillic_phonetic_speech():
+    # Real question from the user (31 авг), after discussing anglicisms with
+    # Rinat: a Latin-script product name in the title ("Go Market"), spoken
+    # and transcribed as Cyrillic phonetics ("гоу маркет"), used to match
+    # nothing at all — zero shared lemmas across scripts. "маркет" alone
+    # phonetically aliases "market"; combined with a real overlapping
+    # Russian word this clears the two-word gate.
+    agenda = [_task("T-1", "Интеграция Go Market с личным кабинетом")]
+    results = match("по гоу маркету всё готово, интеграция с кабинетом сделана", agenda)
+    assert [r.task_key for r in results] == ["T-1"]
+
+
+def test_case13_latin_title_word_still_matches_same_script_speech():
+    # Regression guard: the fuzzy Cyrillic-alias path must not break the
+    # simple case where the utterance is already in the same script as the
+    # title.
+    agenda = [_task("T-1", "Интеграция Go Market с личным кабинетом")]
+    results = match("по Go Market всё готово", agenda)
+    assert [r.task_key for r in results] == ["T-1"]
+
+
 def test_case11_regression_stopword_plus_one_word_stays_silent():
     # Rinat, 31 авг, real 39-minute daily: matcher fired 26 times, ~7 correct
     # — root cause was "для"/"и"/"на" pairing with a single real word to

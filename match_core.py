@@ -4,9 +4,12 @@ from dataclasses import dataclass, field
 from lemmatize import lemmatize
 from sprint_snapshot import Task
 from stopwords import stopword_discount
+from translit import is_phonetic_match
 
 _NUMBER_RE = re.compile(r"\d{2,}")
 _WORD_RE = re.compile(r"[а-яА-ЯёЁa-zA-Z]+")
+_LATIN_RE = re.compile(r"^[a-z]+$")
+_CYRILLIC_RE = re.compile(r"^[а-яё]+$")
 
 MIN_OVERLAP_WORDS = 2
 MIN_SCORE = 0.5
@@ -34,11 +37,35 @@ def compute_idf_weights(agenda: list[Task]) -> dict[str, float]:
     return {lemma: 1 / count for lemma, count in doc_count.items()}
 
 
+def _latin_alias_overlap(utterance_tokens: list[str], title_lemmas: set[str]) -> set[str]:
+    """Latin-script title words (e.g. a product name like "Go Market") that a
+    Cyrillic phonetic rendering in the utterance ("гоу маркет") echoes. Title
+    text in Latin script passes through lemmatize() unchanged (pymorphy3 only
+    knows Cyrillic), so a Latin title word is already a valid "lemma" — this
+    just adds a second way to reach it, on top of the exact-string path that
+    already works when the utterance is ALSO in Latin script.
+    """
+    latin_title_words = {w for w in title_lemmas if _LATIN_RE.match(w)}
+    if not latin_title_words:
+        return set()
+    cyr_tokens = [t for t in utterance_tokens if _CYRILLIC_RE.match(t)]
+    hits = set()
+    for latin_word in latin_title_words:
+        if any(is_phonetic_match(latin_word, tok) for tok in cyr_tokens):
+            hits.add(latin_word)
+    return hits
+
+
 def score_task(
-    utterance_lemmas: list[str], task: Task, idf: dict[str, float]
+    utterance_lemmas: list[str],
+    task: Task,
+    idf: dict[str, float],
+    utterance_tokens: list[str] | None = None,
 ) -> tuple[float, int]:
     title_lemmas = set(lemmatize(_tokenize(task.title)))
     overlap = set(utterance_lemmas) & title_lemmas
+    if utterance_tokens:
+        overlap = overlap | _latin_alias_overlap(utterance_tokens, title_lemmas)
     score = sum(idf.get(lemma, 0.0) * stopword_discount(lemma) for lemma in overlap)
     # Only count words that aren't stopwords toward MIN_OVERLAP_WORDS below —
     # a shared "и"/"для"/"на" still nudges the score (discounted, not zeroed)
@@ -93,7 +120,7 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
     remaining = [t for t in agenda if t.key not in matched_keys]
     scored: list[tuple[Task, float]] = []
     for task in remaining:
-        score, overlap_count = score_task(utterance_lemmas, task, idf)
+        score, overlap_count = score_task(utterance_lemmas, task, idf, tokens)
         if overlap_count >= MIN_OVERLAP_WORDS and score > MIN_SCORE:
             scored.append((task, score))
     scored.sort(key=lambda pair: pair[1], reverse=True)
