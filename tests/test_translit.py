@@ -1,4 +1,4 @@
-from translit import translit, is_phonetic_match
+from translit import KNOWN_IT_TERMS, translit, is_phonetic_match
 
 
 def test_translit_known_it_loanwords():
@@ -10,6 +10,19 @@ def test_translit_known_it_loanwords():
     assert translit("commit") == "коммит"
     assert translit("market") == "маркет"
     assert translit("production") == "продакшн"
+
+
+def test_known_it_terms_override_the_letter_rules():
+    # The letter rules alone get "backend" wrong ("бакенд", not the real
+    # "бэкенд") — the curated KNOWN_IT_TERMS dict is checked first and wins.
+    assert KNOWN_IT_TERMS["backend"] == "бэкенд"
+    assert translit("backend") == "бэкенд"
+    assert translit("BACKEND") == "бэкенд"  # case-insensitive
+
+
+def test_known_it_terms_not_in_dict_still_falls_back_to_rules():
+    assert "market" not in KNOWN_IT_TERMS
+    assert translit("market") == "маркет"  # rules alone already get this right
 
 
 def test_is_phonetic_match_true_for_close_transliteration():

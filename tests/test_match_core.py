@@ -125,6 +125,36 @@ def test_case12_latin_title_word_recognized_via_cyrillic_phonetic_speech():
     assert [r.task_key for r in results] == ["T-1"]
 
 
+def test_case13b_real_youtube_autocaption_data_clean_cyrillic_recognized():
+    # Grounded in real data, not another synthetic guess: pulled auto-
+    # generated Russian captions for a real podcast episode about code
+    # review (Podlodka #251 "Peer Review", youtube.com/watch?v=1bnIA1c3_30,
+    # via yt-dlp) to see how real STT output actually mangles this class of
+    # term. Real auto-caption output for "код ревью" (clean Cyrillic,
+    # phonetic alias for a Latin "Code Review" title) — recognized.
+    agenda = [_task("T-1", "Code Review для PR по авторизации")]
+    results = match(
+        "вообще весь код ревью на за весь процесс койку сетапа недоверие программистом",
+        agenda,
+    )
+    assert [r.task_key for r in results] == ["T-1"]
+
+
+def test_case13c_real_youtube_autocaption_garbled_stt_stays_silent():
+    # Same source (Podlodka #251 real auto-captions). "код ревью" ("code
+    # review") sometimes came out as "кот ревью" — STT mis-heard it as "кот"
+    # (cat, a real unrelated Russian word), not a clean phonetic rendering.
+    # Must stay silent: "guessing" that a real, unrelated word means the
+    # anglicism is exactly the false-positive risk the whole feature has to
+    # avoid — a single garbled data point isn't grounds to match.
+    agenda = [_task("T-1", "Code Review для PR по авторизации")]
+    results = match(
+        "кот ревью на многопоточности будет смотреть другой такой же junior",
+        agenda,
+    )
+    assert results == []
+
+
 def test_case13_latin_title_word_still_matches_same_script_speech():
     # Regression guard: the fuzzy Cyrillic-alias path must not break the
     # simple case where the utterance is already in the same script as the

@@ -24,9 +24,37 @@ _SINGLE = {
     "y": "й", "z": "з",
 }
 
+# Groundwork for common IT/PM anglicisms: their real, established Cyrillic
+# spelling, checked before falling back to the letter-rules above (which get
+# some of these wrong on their own — e.g. "backend" -> rule-based "бакенд"
+# vs the real "бэкенд"). Sourced from public IT-slang glossaries
+# (javarush.com, hexlet.io, journal.sovcombank.ru), not invented, and this
+# project's own real-data check (Podlodka podcast #251 auto-captions
+# confirmed "review" -> "ревью" as actually-occurring usage). Not
+# exhaustive — extend as real transcripts surface more terms, same spirit as
+# stopwords.py's own "reconstructed, not complete" honesty.
+KNOWN_IT_TERMS: dict[str, str] = {
+    "sprint": "спринт", "deploy": "деплой", "deployment": "деплой",
+    "backend": "бэкенд", "frontend": "фронтенд", "review": "ревью",
+    "commit": "коммит", "merge": "мёрж", "task": "таск",
+    "stage": "стейдж", "staging": "стейджинг", "production": "продакшн",
+    "prod": "прод", "fix": "фикс", "hotfix": "хотфикс", "bug": "баг",
+    "release": "релиз", "feature": "фича", "build": "билд",
+    "push": "пуш", "pull": "пул", "branch": "бранч", "master": "мастер",
+    "daily": "дейлик", "standup": "стендап", "backlog": "бэклог",
+    "roadmap": "роадмап", "milestone": "майлстоун", "epic": "эпик",
+    "story": "стори", "ticket": "тикет", "board": "борд",
+    "kanban": "канбан", "retro": "ретро", "demo": "демо",
+    "refactor": "рефактор", "refactoring": "рефакторинг",
+    "deadline": "дедлайн", "scope": "скоуп", "approve": "апрув",
+    "approved": "апрувед", "config": "конфиг",
+}
+
 
 def translit(word: str) -> str:
     word = word.lower()
+    if word in KNOWN_IT_TERMS:
+        return KNOWN_IT_TERMS[word]
     # Drop a silent word-final "e" after a consonant (magic-e pattern), but
     # only for words of 4+ letters so we don't eat short real vowel-e words.
     if len(word) >= 4 and word.endswith("e") and word[-2] not in "aeiou":
