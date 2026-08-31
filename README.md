@@ -107,6 +107,22 @@ of the full chain: 10/12 non-empty. Not perfect — two calls in that run
 exhausted all three — but a clear improvement over any single model, and
 `get_hints()` degrades to an empty hint rather than crashing either way.
 
+## Anglicisms and mixed-script speech
+
+Established Russian IT loanwords spoken/written in Cyrillic ("задеплоили",
+"заревьюил", "смержил") already match fine — `pymorphy3`'s dictionary knows
+these as real loanwords. Two more cases, checked empirically: a Latin-script
+title word spoken as literal Latin in the transcript matches trivially
+(exact string equality). A Latin-script title word (e.g. a product name like
+"Go Market") spoken and transcribed as Cyrillic phonetics ("гоу маркет") is
+handled by `translit.py` (see `match_core._latin_alias_overlap`) — fuzzy,
+not exact, since the transliterator itself is only ~65% exact against real
+loanword spellings. Known limitation: components <=3 letters ("go") require
+an exact transliteration match to stay safe (a looser threshold can't tell
+"гоу" apart from the unrelated filler word "ого" — both score 0.80
+similarity against "го") — so a short component won't alias-match on its
+own, only combined with another real overlapping word in the same utterance.
+
 ## Known gaps in this iteration
 
 Not implemented: live microphone / Speechmatics STT (still reads an invented
