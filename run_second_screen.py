@@ -1,6 +1,7 @@
 import json
 import re
 import sys
+import threading
 import time
 
 import webview
@@ -70,9 +71,13 @@ def _state_json(meeting: Meeting, agenda, alarm_task) -> str:
     })
 
 
-def _run_replay(window):
+def _run_replay(window, loaded_event):
     try:
-        time.sleep(3)  # let the window/page finish loading before the first push
+        # Wait for the page's real load event instead of guessing a fixed
+        # delay — on a busy machine 3s isn't always enough and evaluate_js
+        # fails with "Can't find variable: renderMeeting" (Rinat, 31 авг,
+        # hit this twice on his machine).
+        loaded_event.wait(timeout=10)
 
         tasks = load_sprint("fixtures/sprint.json")
         agenda = build_agenda(tasks, TEAM)
@@ -137,4 +142,6 @@ if __name__ == "__main__":
         on_top=True,
         transparent=True,
     )
-    webview.start(_run_replay, window)
+    loaded_event = threading.Event()
+    window.events.loaded += loaded_event.set
+    webview.start(_run_replay, (window, loaded_event))
