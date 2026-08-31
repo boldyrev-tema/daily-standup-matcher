@@ -33,6 +33,17 @@ def test_build_agenda_sorts_by_recency_descending():
     assert [t.key for t in result] == ["A-2", "A-1"]
 
 
+def test_build_agenda_excludes_closed_statuses():
+    # Rinat, 31 авг, real sprint run: build_agenda took the freshest six by
+    # assignee regardless of status — on his real sprint three of six rows
+    # would have been "Закрыто"/"Обработано" (finished, nothing to discuss).
+    closed1 = _task("A-1", "Аня", "Закрыто", 1, NOW)
+    closed2 = _task("A-2", "Аня", "Обработано", 2, NOW)
+    live = _task("A-3", "Аня", "В работе", 3, NOW)
+    result = build_agenda([closed1, closed2, live], team=["Аня"])
+    assert [t.key for t in result] == ["A-3"]
+
+
 def test_build_agenda_limits_to_six():
     tasks = [_task(f"A-{i}", "Аня", "S", i, NOW) for i in range(9)]
     result = build_agenda(tasks, team=["Аня"])
