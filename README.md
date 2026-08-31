@@ -1,11 +1,11 @@
 # daily_standup_matcher
 
-Reconstruction of the "ядро без интерфейса" (core, no UI) slice from Rinat's
+Reconstruction of the "ядро без интерфейса" (core, no UI) slice from a
 daily-standup-copilot techspec — recognizes which sprint task is being
 discussed from a finalized speech utterance, or stays silent when unsure.
 
-Built without access to Rinat's real code, real Fireflies transcripts, or a
-real Jira snapshot — see `docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md`
+Built without access to the original real code, real Fireflies transcripts,
+or a real Jira snapshot — see `docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md`
 for what's a faithful reconstruction vs. an explicitly-flagged assumption.
 
 ## Setup
@@ -24,18 +24,23 @@ venv/bin/python3 -m pytest -v
 ## What's here
 
 - `sprint_snapshot.py` — `Task` model + JSON fixture loader (no live Jira).
-- `agenda.py` — filter by team, sort by recency, limit to 6, pick the single
-  alarm task (reopened beats ≥4-days-stale).
+- `agenda.py` — filter by team, drop closed/done tasks, sort by recency,
+  limit to 6, pick the single alarm task (reopened beats ≥4-days-stale).
 - `stopwords.py` — background/filler words get a ×⅓ weight discount, never
-  full removal.
+  full removal — but don't count toward the minimum-overlap-words gate in
+  `match_core.py` (a stopword still nudges the score, it just can't satisfy
+  "two real words" on its own).
 - `lemmatize.py` — `pymorphy3` wrapper (not `pymorphy2` — doesn't install on
   Python 3.14 here).
+- `translit.py` — English-to-Cyrillic transliteration for anglicism/mixed-
+  script matching, see "Anglicisms and mixed-script speech" below.
 - `match_core.py` — the matcher: explicit spoken numbers (already digits by
   the time STT hands them over) short-circuit to a match; otherwise IDF-
-  weighted lemma overlap with a ≥2-word minimum and a score-margin gate
+  weighted lemma overlap (plus a fuzzy Cyrillic-phonetic alias for Latin
+  title words) with a ≥2-significant-word minimum and a score-margin gate
   against the runner-up candidate. Returns a list, since one utterance can
   mention more than one task.
-- `fixtures/sprint.json` — 6 invented tasks (no real Tranio data) covering
+- `fixtures/sprint.json` — 6 invented tasks (no real company data) covering
   every test case in the spec, including two live-bug regression cases.
 - `facts.py` — deterministic 2-5 line Jira-fact builder from a `Task`.
 - `meeting.py` — `Line`/`Meeting` state: recognized-task tracking, progressive
@@ -72,9 +77,9 @@ venv/bin/python3 -m pytest -v
 
 ## Why OpenRouter, not Groq
 
-Rinat cloned this repo and ran it against his own real sprint snapshot and a
-full 39-minute Fireflies transcript of an actual daily (not the 6-line demo
-fixture) — see `docs/superpowers/specs/` project memory for the full writeup.
+A live run against a real sprint snapshot and a full 39-minute Fireflies
+transcript of an actual daily (not the 6-line demo fixture) surfaced this —
+see `docs/superpowers/specs/` project memory for the full writeup.
 Groq's free tier limit is 8000 tokens/minute *regardless of model size*, and
 one hint call is ~2300 tokens, so it 429s after the third recognition inside
 any given minute — fatal on a real call with many recognitions close together.
@@ -117,11 +122,24 @@ title word spoken as literal Latin in the transcript matches trivially
 "Go Market") spoken and transcribed as Cyrillic phonetics ("гоу маркет") is
 handled by `translit.py` (see `match_core._latin_alias_overlap`) — fuzzy,
 not exact, since the transliterator itself is only ~65% exact against real
-loanword spellings. Known limitation: components <=3 letters ("go") require
-an exact transliteration match to stay safe (a looser threshold can't tell
-"гоу" apart from the unrelated filler word "ого" — both score 0.80
-similarity against "го") — so a short component won't alias-match on its
-own, only combined with another real overlapping word in the same utterance.
+loanword spellings on its own. `translit.py` also carries `KNOWN_IT_TERMS`,
+a curated base of common IT/PM anglicism spellings checked before the
+letter rules — pushes that to 14/14 exact on the calibration set (see
+`tests/test_translit.py`), extend it as more terms come up in practice.
+Known limitation: components <=3 letters ("go") require an exact
+transliteration match to stay safe (a looser threshold can't tell "гоу"
+apart from the unrelated filler word "ого" — both score 0.80 similarity
+against "го") — so a short component won't alias-match on its own, only
+combined with another real overlapping word in the same utterance.
+
+Validated against real (not invented) mixed-language speech: pulled actual
+YouTube auto-captions for a public Russian podcast episode about code
+review via `yt-dlp` — the same term came out three different ways in the
+same recording (clean Latin, mixed-script, and clean Cyrillic), plus one
+case where the STT mis-heard it as an unrelated real word entirely. The
+matcher gets the clean-Cyrillic case right and correctly stays silent on
+the unrelated-word misheard case — see
+`test_case13b`/`test_case13c` in `tests/test_match_core.py`.
 
 ## Known gaps in this iteration
 
