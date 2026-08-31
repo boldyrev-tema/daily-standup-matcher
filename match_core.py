@@ -40,7 +40,14 @@ def score_task(
     title_lemmas = set(lemmatize(_tokenize(task.title)))
     overlap = set(utterance_lemmas) & title_lemmas
     score = sum(idf.get(lemma, 0.0) * stopword_discount(lemma) for lemma in overlap)
-    return score, len(overlap)
+    # Only count words that aren't stopwords toward MIN_OVERLAP_WORDS below —
+    # a shared "и"/"для"/"на" still nudges the score (discounted, not zeroed)
+    # but must not by itself satisfy "at least two overlapping words", or a
+    # single real content word plus one shared filler word passes the gate.
+    # Real false positives on a full transcript (Rinat, 31 авг): matched on
+    # "и"/"для"/"на" pairing with one unrelated word each time.
+    significant_overlap = {lemma for lemma in overlap if stopword_discount(lemma) >= 1.0}
+    return score, len(significant_overlap)
 
 
 def _hit_words(tokens: list[str], lemmas: list[str], title_lemmas: set[str]) -> list[str]:

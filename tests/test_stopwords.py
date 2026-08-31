@@ -21,3 +21,10 @@ def test_common_function_words_are_covered():
     # positive, because neither was discounted as a stopword.
     for word in ("и", "с", "на", "не", "что", "но", "за", "у", "к", "по", "от", "из"):
         assert word in STOPWORDS, f"{word!r} should be a stopword"
+
+
+def test_words_rinat_named_as_missing_are_covered():
+    # Rinat, 31 авг, real 39-minute daily run: named "под"/"явно" specifically
+    # as words the reconstructed stopword list was still missing.
+    for word in ("под", "явно"):
+        assert word in STOPWORDS, f"{word!r} should be a stopword"

@@ -59,9 +59,23 @@ def test_score_task_discounts_stopword_but_does_not_zero_it():
     idf = {"выгрузка": 1.0, "там": 1.0}
     score_with_filler, count_with = score_task(["выгрузка", "там"], task, idf)
     score_without_filler, count_without = score_task(["выгрузка"], task, idf)
-    assert count_with == 2
+    assert count_with == 1
     assert count_without == 1
     assert score_without_filler < score_with_filler < score_without_filler + idf["там"]
+
+
+def test_score_task_stopword_only_overlap_does_not_count_toward_gate():
+    # Regression: Rinat's 31 авг real-transcript run found the matcher firing
+    # 26 times on a 39-minute daily with only ~7 correct — root cause was
+    # stopwords ("и"/"для"/"на") satisfying MIN_OVERLAP_WORDS on their own
+    # weight alongside one unrelated word, even though they're discounted in
+    # score. A title whose ONLY overlap with the utterance is a stopword must
+    # report a significant-word count of 0, not 1.
+    task = _task("A-1", "Функционал для клиентов")
+    idf = {"функционал": 1.0, "для": 1.0, "клиент": 1.0}
+    score, count = score_task(["для", "погода"], task, idf)
+    assert count == 0
+    assert score > 0  # still discounted into the score, just not into the gate
 
 
 AGENDA = load_sprint("fixtures/sprint.json")
@@ -96,6 +110,16 @@ def test_case3b_second_regression_found_watching_the_full_demo():
 
 def test_case4_single_overlapping_word_is_not_enough():
     results = match("короче там ждём поставщиков ещё", AGENDA)
+    assert results == []
+
+
+def test_case11_regression_stopword_plus_one_word_stays_silent():
+    # Rinat, 31 авг, real 39-minute daily: matcher fired 26 times, ~7 correct
+    # — root cause was "для"/"и"/"на" pairing with a single real word to
+    # satisfy MIN_OVERLAP_WORDS=2. "для функционала" only shares "для"
+    # (stopword) and "функционал" with NOVA-10230's title — one real word,
+    # should stay silent even though the raw score clears MIN_SCORE.
+    results = match("для функционала ещё рановато, давайте позже", AGENDA)
     assert results == []
 
 
