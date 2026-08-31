@@ -6,7 +6,22 @@ from meeting import Line
 from sprint_snapshot import Task
 
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+# Tried in order until one succeeds. Empirically measured (31 авг, two 8-call
+# batches on this project's real prompt shape): free-tier models on OpenRouter
+# are single-provider with no automatic failover, and reliability swings hard
+# batch to batch (nemotron-3-super went from 9/10 to 3/8 between two runs on
+# the same day - "Service temporarily overloaded"/"Upstream idle timeout").
+# nano-omni and nemotron-3-super are both hosted by Nvidia - if Nvidia has a
+# bad day both fail together - so minimax-m3 (GMICloud, a different upstream)
+# is kept as a genuinely independent fallback, not just a second guess.
+#   nemotron-3-nano-omni-30b (reasoning off): 8/8, ~1.8s avg - fastest+most reliable so far
+#   minimax-m3:                                8/8, ~2-4s typical (one 37s outlier)
+#   nemotron-3-super (reasoning off):          3/8 this batch, 9/10 a batch earlier
+MODEL_CHAIN: list[tuple[str, dict]] = [
+    ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", {"reasoning": {"enabled": False}}),
+    ("minimax/minimax-m3:free", {}),
+    ("nvidia/nemotron-3-super-120b-a12b:free", {"reasoning": {"enabled": False}}),
+]
 LOOKBACK_SECONDS = 90.0
 
 SYSTEM_PROMPT = (
@@ -59,9 +74,10 @@ def _request_hints(payload: dict, api_key: str, timeout: float) -> tuple[list[st
         timeout=timeout,
     )
     resp.raise_for_status()
-    # OpenRouter can return HTTP 200 with an error body (observed:
-    # {"error": {"message": "Upstream idle timeout exceeded", "code": 504}})
-    # when the free model's own backend is slow — raise_for_status() doesn't
+    # OpenRouter can return HTTP 200 with an error body (observed both
+    # {"error": {"message": "Upstream idle timeout exceeded", "code": 504}}
+    # and {"message": "...Service temporarily overloaded", "code": 502}) when
+    # the free model's own backend is struggling — raise_for_status() doesn't
     # catch this, "choices" is simply missing, which raises KeyError below.
     content = resp.json()["choices"][0]["message"]["content"]
     parsed = json.loads(content)
@@ -75,7 +91,7 @@ def _request_hints(payload: dict, api_key: str, timeout: float) -> tuple[list[st
 
 
 def get_hints(
-    lines: list[Line], task: Task, api_key: str, timeout: float = 6.0, retries: int = 1
+    lines: list[Line], task: Task, api_key: str, timeout: float = 6.0
 ) -> tuple[list[str], str | None]:
     if not lines:
         return [], None
@@ -84,25 +100,23 @@ def get_hints(
         f"Карточка задачи:\n{_task_card(task)}\n\n"
         f"Реплики за последние 90с:\n{_recent_lines_text(lines, now_t)}"
     )
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0,
-        # nemotron-3-super defaults to a reasoning pass that burns 1000+ hidden
-        # tokens and pushes latency to 40-50s — disabling it drops responses
-        # to ~2-3s with no quality loss on this prompt (verified empirically).
-        "reasoning": {"enabled": False},
-    }
-    # The free model's backend times out on OpenRouter's end intermittently
-    # (empirically ~1 in 3 calls) — that failure is transient, so one retry
-    # recovers most of them instead of silently showing an empty hint.
-    for attempt in range(retries + 1):
+    # Walk the fallback chain instead of retrying the same model — a free
+    # model's backend having a bad minute is common enough (see MODEL_CHAIN
+    # comment) that a different provider recovers more often than a retry on
+    # the same one.
+    for model, extra in MODEL_CHAIN:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+            **extra,
+        }
         try:
             return _request_hints(payload, api_key, timeout)
         except (requests.exceptions.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError):
-            if attempt == retries:
-                return [], None
+            continue
+    return [], None

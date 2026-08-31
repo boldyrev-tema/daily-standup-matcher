@@ -80,20 +80,32 @@ one hint call is ~2300 tokens, so it 429s after the third recognition inside
 any given minute — fatal on a real call with many recognitions close together.
 
 OpenRouter's free tier is rate-limited by request count (50/day on a fresh
-account, 20 RPM), not tokens, which doesn't hit the same wall. Tested 5 free
-models empirically against this project's real prompt shape:
-`google/gemma-4-31b-it:free` and `z-ai/glm-5.2:free` were consistently
-upstream-429'd (shared free pool saturated, not our own quota) both times
-tried. `nvidia/nemotron-3.5-lightning:free` and the default (reasoning-on)
-`nvidia/nemotron-3-super-120b-a12b:free` both defaulted into a hidden
-reasoning pass — 49s and 195s respectively, with the smaller Lightning model
-also producing a character-level typo in its output. Passing
-`"reasoning": {"enabled": false}` on `nemotron-3-super` cut that to 1.8-3.3s
-with no quality loss, so that's what's wired into `hints.py`.
-`minimax/minimax-m3:free` was comparably fast without needing that flag, but
-its response body occasionally interleaves keep-alive whitespace pings that
-broke naive JSON parsing in ad-hoc testing — kept as a fallback candidate,
-not the default, until that's investigated further.
+account, 20 RPM, same for every free model — checked via `GET /api/v1/key`,
+this isn't a per-model knob), not tokens, so it doesn't hit the same wall.
+
+Tested 8 free models empirically against this project's real prompt shape,
+across multiple batches on the same day. `google/gemma-4-31b-it:free` and
+`z-ai/glm-5.2:free` were consistently upstream-429'd (shared free pool
+saturated, not our own quota). `nvidia/nemotron-3.5-lightning:free` and
+`minimax/minimax-m2.7:free` defaulted into a hidden reasoning pass or were
+just slow/unreliable (15-195s, sometimes an empty response body).
+
+**The free tier's real failure mode turned out to be provider volatility, not
+model choice.** `nvidia/nemotron-3-super-120b-a12b:free` (reasoning disabled)
+scored 9/10 in one batch and 3/8 an hour later in a different batch, with a
+different error each time (`Upstream idle timeout exceeded` vs `Service
+temporarily overloaded`) — `GET /api/v1/models/.../endpoints` confirms it has
+exactly one upstream provider (Nvidia), no OpenRouter-side failover. So
+`hints.py` doesn't pick one "best" model — it walks a `MODEL_CHAIN` of three,
+falling through on failure instead of retrying the same one:
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` (reasoning off, 8/8 and
+8/8 in two batches, ~1.8s avg — fastest and most reliable so far) first, then
+`minimax/minimax-m3:free` (8/8 and 8/8, ~2-4s typical, one 37s outlier — also
+a genuinely different upstream, GMICloud, so it doesn't share Nvidia's bad
+days) as a real fallback, then `nemotron-3-super` last. Live end-to-end test
+of the full chain: 10/12 non-empty. Not perfect — two calls in that run
+exhausted all three — but a clear improvement over any single model, and
+`get_hints()` degrades to an empty hint rather than crashing either way.
 
 ## Known gaps in this iteration
 
