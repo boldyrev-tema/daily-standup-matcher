@@ -14,7 +14,7 @@ from meeting import Line, Meeting
 from sprint_snapshot import load_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
-GROQ_KEY_PATH = "~/.credentials/groq_api_key.env"
+LLM_KEY_PATH = "~/.credentials/openrouter_api_key.env"
 _WORD_RE = re.compile(r"[а-яА-ЯёЁa-zA-Z]+")
 
 
@@ -79,7 +79,7 @@ def _run_replay(window):
         alarm_task = pick_alarm(agenda)
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)
-        api_key = load_credential(GROQ_KEY_PATH, "GROQ_API_KEY")
+        api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
         window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")

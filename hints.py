@@ -5,8 +5,8 @@ import requests
 from meeting import Line
 from sprint_snapshot import Task
 
-GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "openai/gpt-oss-120b"
+OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 LOOKBACK_SECONDS = 90.0
 
 SYSTEM_PROMPT = (
@@ -51,8 +51,31 @@ def _recent_lines_text(lines: list[Line], now_t: float) -> str:
     return "\n".join(f"{l.who or '?'}: {l.text}" for l in recent)
 
 
+def _request_hints(payload: dict, api_key: str, timeout: float) -> tuple[list[str], str | None]:
+    resp = requests.post(
+        OPENROUTER_ENDPOINT,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=payload,
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    # OpenRouter can return HTTP 200 with an error body (observed:
+    # {"error": {"message": "Upstream idle timeout exceeded", "code": 504}})
+    # when the free model's own backend is slow — raise_for_status() doesn't
+    # catch this, "choices" is simply missing, which raises KeyError below.
+    content = resp.json()["choices"][0]["message"]["content"]
+    parsed = json.loads(content)
+    if not isinstance(parsed, dict):
+        return [], None
+    said = parsed.get("said", [])
+    ask = parsed.get("ask")
+    if not isinstance(said, list):
+        return [], None
+    return said[:3], ask
+
+
 def get_hints(
-    lines: list[Line], task: Task, api_key: str, timeout: float = 3.0
+    lines: list[Line], task: Task, api_key: str, timeout: float = 6.0, retries: int = 1
 ) -> tuple[list[str], str | None]:
     if not lines:
         return [], None
@@ -62,30 +85,24 @@ def get_hints(
         f"Реплики за последние 90с:\n{_recent_lines_text(lines, now_t)}"
     )
     payload = {
-        "model": GROQ_MODEL,
+        "model": OPENROUTER_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ],
         "response_format": {"type": "json_object"},
         "temperature": 0,
+        # nemotron-3-super defaults to a reasoning pass that burns 1000+ hidden
+        # tokens and pushes latency to 40-50s — disabling it drops responses
+        # to ~2-3s with no quality loss on this prompt (verified empirically).
+        "reasoning": {"enabled": False},
     }
-    try:
-        resp = requests.post(
-            GROQ_ENDPOINT,
-            headers={"Authorization": f"Bearer {api_key}"},
-            json=payload,
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
-        if not isinstance(parsed, dict):
-            return [], None
-        said = parsed.get("said", [])
-        ask = parsed.get("ask")
-        if not isinstance(said, list):
-            return [], None
-        return said[:3], ask
-    except (requests.exceptions.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError):
-        return [], None
+    # The free model's backend times out on OpenRouter's end intermittently
+    # (empirically ~1 in 3 calls) — that failure is transient, so one retry
+    # recovers most of them instead of silently showing an empty hint.
+    for attempt in range(retries + 1):
+        try:
+            return _request_hints(payload, api_key, timeout)
+        except (requests.exceptions.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError):
+            if attempt == retries:
+                return [], None
