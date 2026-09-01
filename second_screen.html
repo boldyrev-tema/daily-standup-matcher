@@ -93,9 +93,21 @@
     border-radius: 10px; padding: 10px 12px; color: var(--accent-text);
     font-size: 14px; line-height: 1.4;
   }
+
+  .minimize-btn {
+    position: fixed; top: 10px; right: 12px; z-index: 10;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(255,255,255,.08); border: none; color: var(--dim);
+    font-size: 15px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .minimize-btn:hover { background: rgba(255,255,255,.16); color: var(--ink); }
+  .minimize-btn:active { transform: scale(.92); }
 </style>
 </head>
 <body>
+  <button class="minimize-btn" id="minimize-btn" title="Свернуть" aria-label="Свернуть окно">–</button>
   <div class="app">
     <div class="col col-heard">
       <div class="col-header">
@@ -268,6 +280,12 @@ function renderMeeting(state) {
 }
 
 window.renderMeeting = renderMeeting;
+
+document.getElementById("minimize-btn").addEventListener("click", () => {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.minimize_window();
+  }
+});
 </script>
 </body>
 </html>
