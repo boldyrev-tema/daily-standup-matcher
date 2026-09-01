@@ -2,7 +2,16 @@ from datetime import datetime, timezone
 
 import pytest
 
-from match_core import MatchResult, _hit_words, compute_idf_weights, extract_number_mentions, match, score_task
+from match_core import (
+    MatchResult,
+    _hit_words,
+    ambiguous_candidates,
+    compute_idf_weights,
+    extract_number_mentions,
+    match,
+    resolve_pending,
+    score_task,
+)
 from sprint_snapshot import Task, load_sprint
 
 
@@ -193,6 +202,44 @@ def test_case7_pure_filler_utterance_matches_nothing():
 def test_case8_ambiguous_tie_between_two_similar_tasks():
     results = match("надо доделать выгрузку контактов в систему", AGENDA)
     assert results == []
+
+
+def test_ambiguous_candidates_empty_when_nothing_scores():
+    assert ambiguous_candidates("ну короче вот как бы", AGENDA) == []
+
+
+def test_ambiguous_candidates_empty_when_one_task_wins_clearly():
+    solo = [_task("T-1", "Интеграция Go Market с личным кабинетом")]
+    assert ambiguous_candidates("по Go Market всё готово", solo) == []
+
+
+def test_ambiguous_candidates_returns_the_tied_pair():
+    # Same real tie as test_case8 — this is the set match() silently drops.
+    candidates = ambiguous_candidates("надо доделать выгрузку контактов в систему", AGENDA)
+    assert {t.key for t in candidates} == {"NOVA-10267", "NOVA-10288"}
+
+
+def test_resolve_pending_picks_the_task_the_next_line_disambiguates():
+    # Rinat, 2 сен: first line about "сделки" ties, next line's extra detail
+    # ("старую") resolves it — mirrors his SITE-12160/SITE-12170 case.
+    candidates = ambiguous_candidates("надо доделать выгрузку контактов в систему", AGENDA)
+    resolved = resolve_pending(
+        "надо доделать выгрузку контактов в систему",
+        candidates,
+        "именно в старую систему, для партнёров",
+    )
+    assert resolved is not None
+    assert resolved.task_key == "NOVA-10267"
+
+
+def test_resolve_pending_none_when_still_ambiguous():
+    candidates = ambiguous_candidates("надо доделать выгрузку контактов в систему", AGENDA)
+    resolved = resolve_pending(
+        "надо доделать выгрузку контактов в систему",
+        candidates,
+        "ну давайте после обеда",
+    )
+    assert resolved is None
 
 
 def test_case9_unrelated_smalltalk_matches_nothing():

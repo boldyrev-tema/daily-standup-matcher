@@ -62,3 +62,23 @@ def test_replay_recognizes_all_tasks_from_a_single_two_match_utterance():
     assert "NOVA-10214" in meeting.done
     assert "NOVA-10230" in meeting.done
     assert meeting.remaining_count == len(agenda) - 2
+
+
+def test_replay_backfills_an_ambiguous_line_once_the_next_line_disambiguates_it():
+    # Rinat, 2 сен: on his real Jira, a genuine single-utterance tie between
+    # two "сделки" tasks (SITE-12160/SITE-12170) resolved on the immediately
+    # following line — same shape as NOVA-10267/NOVA-10288 here, just with a
+    # same-topic continuation instead of a topic switch (unlike the deliberately
+    # ambiguous-and-unresolved line in sample_daily_transcript.json above).
+    tasks = load_sprint("fixtures/sprint.json")
+    agenda = build_agenda(tasks, TEAM)
+    transcript = [
+        {"speaker": "Полина", "text": "Мы выгружаем контакты в систему, но пока не уверены в какую именно."},
+        {"speaker": "Полина", "text": "А, точно, это была старая система, для партнёров."},
+    ]
+
+    meeting = replay(transcript, agenda)
+
+    assert meeting.done == ["NOVA-10267"]
+    assert meeting.lines[0].task == "NOVA-10267"
+    assert meeting.lines[1].task == "NOVA-10267"

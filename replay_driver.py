@@ -1,7 +1,8 @@
 import re
 
-from match_core import match
+from match_core import ambiguous_candidates, match
 from meeting import Line, Meeting
+from run_second_screen import _apply_pending
 from sprint_snapshot import Task
 
 _WORD_RE = re.compile(r"[а-яА-ЯёЁa-zA-Z]+")
@@ -30,13 +31,21 @@ def _primary_match(results):
 def replay(transcript: list[dict], agenda: list[Task]) -> Meeting:
     meeting = Meeting(phase="live", remaining_count=len(agenda))
     t = 0.0
+    pending: tuple[Line, list[Task]] | None = None
     for turn in transcript:
         t += _utterance_duration(turn["text"])
         results = match(turn["text"], agenda)
         primary = _primary_match(results)
+        primary, pending = _apply_pending(pending, primary, turn["text"], agenda, meeting)
+
         task_key = primary.task_key if primary else None
-        meeting.add_line(Line(t=t, who=turn.get("speaker"), text=turn["text"], task=task_key))
+        line = Line(t=t, who=turn.get("speaker"), text=turn["text"], task=task_key)
+        meeting.add_line(line)
         for r in results:
             meeting.mark_recognized(r.task_key)
+        if primary is None:
+            candidates = ambiguous_candidates(turn["text"], agenda)
+            if len(candidates) >= 2:
+                pending = (line, candidates)
     meeting.phase = "after"
     return meeting

@@ -77,6 +77,18 @@ def score_task(
     return score, len(significant_overlap)
 
 
+def _scored_candidates(
+    lemmas: list[str], tokens: list[str], candidates: list[Task], idf: dict[str, float]
+) -> list[tuple[Task, float]]:
+    scored: list[tuple[Task, float]] = []
+    for task in candidates:
+        score, overlap_count = score_task(lemmas, task, idf, tokens)
+        if overlap_count >= MIN_OVERLAP_WORDS and score > MIN_SCORE:
+            scored.append((task, score))
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    return scored
+
+
 def _hit_words(tokens: list[str], lemmas: list[str], title_lemmas: set[str]) -> list[str]:
     seen: set[str] = set()
     hits: list[str] = []
@@ -118,12 +130,7 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
                 break
 
     remaining = [t for t in agenda if t.key not in matched_keys]
-    scored: list[tuple[Task, float]] = []
-    for task in remaining:
-        score, overlap_count = score_task(utterance_lemmas, task, idf, tokens)
-        if overlap_count >= MIN_OVERLAP_WORDS and score > MIN_SCORE:
-            scored.append((task, score))
-    scored.sort(key=lambda pair: pair[1], reverse=True)
+    scored = _scored_candidates(utterance_lemmas, tokens, remaining, idf)
 
     if scored:
         top_task, top_score = scored[0]
@@ -136,3 +143,41 @@ def match(utterance: str, agenda: list[Task]) -> list[MatchResult]:
     task_by_key = {t.key: t for t in agenda}
     results.sort(key=lambda r: task_by_key[r.task_key].updated_at, reverse=True)
     return results
+
+
+def ambiguous_candidates(utterance: str, agenda: list[Task]) -> list[Task]:
+    """Tasks match() stayed silent on because they were within
+    REQUIRED_MARGIN of each other despite each clearing MIN_OVERLAP_WORDS and
+    MIN_SCORE alone (see match()'s margin gate). Lets a caller retry
+    disambiguation with more context — see resolve_pending — restricted to
+    just this set, so a merged retry can only pick a winner among real
+    contenders, never surface a task that wasn't already one.
+    """
+    if not agenda:
+        return []
+    idf = compute_idf_weights(agenda)
+    tokens = _tokenize(utterance)
+    lemmas = lemmatize(tokens)
+    scored = _scored_candidates(lemmas, tokens, agenda, idf)
+    if len(scored) < 2:
+        return []
+    top_score = scored[0][1]
+    tied = [task for task, score in scored if top_score - score < REQUIRED_MARGIN]
+    return tied if len(tied) >= 2 else []
+
+
+def resolve_pending(
+    pending_text: str, pending_candidates: list[Task], current_text: str
+) -> MatchResult | None:
+    """Retry an utterance match() left ambiguous, using the very next
+    utterance as extra context — Rinat, 2 сен: a genuine single-utterance tie
+    (two "сделки" tasks, SITE-12160/SITE-12170) resolved on the immediately
+    following line, so on screen the miss was barely noticeable; this closes
+    that gap outright instead of leaving the first line's task permanently
+    unlabeled. Restricted to pending_candidates (the tie ambiguous_candidates
+    already found) so the merged retry can only choose among real
+    contenders, never invent a match against the full agenda.
+    """
+    combined = f"{pending_text} {current_text}"
+    results = match(combined, pending_candidates)
+    return results[0] if len(results) == 1 else None
