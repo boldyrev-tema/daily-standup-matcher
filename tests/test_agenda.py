@@ -4,13 +4,14 @@ from agenda import REOPENED_STATUS, build_agenda, pick_alarm
 from sprint_snapshot import Task
 
 
-def _task(key, assignee, status, days_ago, now):
+def _task(key, assignee, status, days_ago, now, status_category=None):
     return Task(
         key=key,
         title=f"Заголовок {key}",
         assignee=assignee,
         status=status,
         updated_at=now - timedelta(days=days_ago),
+        status_category=status_category,
     )
 
 
@@ -42,6 +43,26 @@ def test_build_agenda_excludes_closed_statuses():
     live = _task("A-3", "Аня", "В работе", 3, NOW)
     result = build_agenda([closed1, closed2, live], team=["Аня"])
     assert [t.key for t in result] == ["A-3"]
+
+
+def test_build_agenda_excludes_by_status_category_when_present():
+    # Rinat, 2 сен: his real Jira has "done"-category statuses under names
+    # we don't have in CLOSED_STATUSES ("Reviewed", "ON REVIEW") — when
+    # status_category is present it's authoritative, name matching is only
+    # the fallback for tasks that don't carry it.
+    reviewed = _task("A-1", "Аня", "Reviewed", 1, NOW, status_category="done")
+    live = _task("A-2", "Аня", "В работе", 2, NOW, status_category="indeterminate")
+    result = build_agenda([reviewed, live], team=["Аня"])
+    assert [t.key for t in result] == ["A-2"]
+
+
+def test_build_agenda_status_category_overrides_name_when_both_present():
+    # A status named like a closed one but whose statusCategory says
+    # otherwise (e.g. a project that reuses "Закрыто" for a non-final step)
+    # must not be dropped — status_category wins over the name.
+    task = _task("A-1", "Аня", "Закрыто", 1, NOW, status_category="indeterminate")
+    result = build_agenda([task], team=["Аня"])
+    assert [t.key for t in result] == ["A-1"]
 
 
 def test_build_agenda_limits_to_six():

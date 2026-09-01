@@ -5,16 +5,22 @@ from sprint_snapshot import Task
 REOPENED_STATUS = "Открыто повторно"
 STALE_DAYS = 4
 
-# Reconstructed from Rinat's real-sprint feedback (31 авг), not his full Jira
-# workflow — closed/done statuses are project-specific and we only have his
-# two named examples. Extend this if a real sprint surfaces more.
+# Fallback only, used when a task carries no status_category (Rinat, 2 сен:
+# his real Jira has "done"-category statuses under names we don't have here
+# — "Reviewed", "ON REVIEW" — so name matching alone under-counts closed
+# tasks). Reconstructed from Rinat's real-sprint feedback (31 авг), not his
+# full Jira workflow. Extend this if a real sprint surfaces more names.
 CLOSED_STATUSES = frozenset({"Закрыто", "Обработано"})
 
 
+def _is_done(task: Task) -> bool:
+    if task.status_category is not None:
+        return task.status_category == "done"
+    return task.status in CLOSED_STATUSES
+
+
 def build_agenda(tasks: list[Task], team: list[str]) -> list[Task]:
-    filtered = [
-        t for t in tasks if t.assignee in team and t.status not in CLOSED_STATUSES
-    ]
+    filtered = [t for t in tasks if t.assignee in team and not _is_done(t)]
     ordered = sorted(filtered, key=lambda t: t.updated_at, reverse=True)
     return ordered[:6]
 

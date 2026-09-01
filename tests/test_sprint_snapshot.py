@@ -34,6 +34,7 @@ def test_task_optional_fields_default_empty():
     assert t.labels == []
     assert t.created is None
     assert t.url is None
+    assert t.status_category is None
 
 
 def test_task_optional_fields_can_be_set():
@@ -44,8 +45,20 @@ def test_task_optional_fields_can_be_set():
         labels=["релиз_текущий_спринт"],
         created=datetime(2026, 7, 1, tzinfo=timezone.utc),
         url="https://example.invalid/NOVA-1",
+        status_category="done",
     )
     assert t.priority == "критический"
     assert t.labels == ["релиз_текущий_спринт"]
     assert t.created == datetime(2026, 7, 1, tzinfo=timezone.utc)
     assert t.url == "https://example.invalid/NOVA-1"
+    assert t.status_category == "done"
+
+
+def test_load_sprint_reads_status_category_when_present():
+    tasks = load_sprint("fixtures/sprint.json")
+    by_key = {t.key: t for t in tasks}
+    # NOVA-10230 is "Backlog" — Jira's statusCategory.key for a not-started
+    # status is "new", distinct from "indeterminate" (in progress) and
+    # "done" (finished, regardless of the status's display name).
+    assert by_key["NOVA-10230"].status_category == "new"
+    assert by_key["NOVA-10214"].status_category == "indeterminate"

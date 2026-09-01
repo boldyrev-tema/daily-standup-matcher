@@ -24,8 +24,15 @@ venv/bin/python3 -m pytest -v
 ## What's here
 
 - `sprint_snapshot.py` — `Task` model + JSON fixture loader (no live Jira).
+  Optional `status_category` field expects Jira's `statusCategory.key`
+  (`"new"` / `"indeterminate"` / `"done"`) — stable across projects and
+  locales, unlike status display names.
 - `agenda.py` — filter by team, drop closed/done tasks, sort by recency,
   limit to 6, pick the single alarm task (reopened beats ≥4-days-stale).
+  Drops a task by `status_category == "done"` when present (real Jira
+  workflows use "done"-category status names we don't otherwise know about,
+  e.g. "Reviewed"); falls back to matching `status` against `CLOSED_STATUSES`
+  only when a snapshot doesn't carry `status_category`.
 - `stopwords.py` — background/filler words get a ×⅓ weight discount, never
   full removal — but don't count toward the minimum-overlap-words gate in
   `match_core.py` (a stopword still nudges the score, it just can't satisfy

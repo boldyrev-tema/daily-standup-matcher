@@ -14,6 +14,11 @@ class Task:
     labels: list[str] = field(default_factory=list)
     created: datetime | None = None
     url: str | None = None
+    # Jira's statusCategory.key ("new" / "indeterminate" / "done") — stable
+    # across projects and locales, unlike status names. Optional: absent
+    # when a snapshot predates this field, agenda.py then falls back to
+    # matching status names against CLOSED_STATUSES.
+    status_category: str | None = None
 
 
 def load_sprint(path: str) -> list[Task]:
@@ -30,6 +35,7 @@ def load_sprint(path: str) -> list[Task]:
             labels=item.get("labels", []),
             created=datetime.fromisoformat(item["created"]) if item.get("created") else None,
             url=item.get("url"),
+            status_category=item.get("status_category"),
         )
         for item in raw
     ]
