@@ -10,8 +10,9 @@ from agenda import build_agenda
 from credentials import load_credential
 from facts import build_facts
 from hints import get_hints
-from match_core import match
+from match_core import ambiguous_candidates, match
 from meeting import Line, Meeting
+from run_second_screen import _apply_pending
 from sprint_snapshot import load_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
@@ -69,6 +70,7 @@ def _run_replay(window, loaded_event):
 
         meeting = Meeting(phase="live", remaining_count=len(agenda))
         t = 0.0
+        pending: tuple[Line, list] | None = None
         for turn in transcript:
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
@@ -77,10 +79,17 @@ def _run_replay(window, loaded_event):
 
             results = match(turn["text"], agenda)
             primary = _primary_match(results)
+            primary, pending = _apply_pending(pending, primary, turn["text"], agenda, meeting)
+
             task_key = primary.task_key if primary else None
-            meeting.add_line(Line(t=t, who=turn["speaker"], text=turn["text"], task=task_key))
+            line = Line(t=t, who=turn["speaker"], text=turn["text"], task=task_key)
+            meeting.add_line(line)
             for r in results:
                 meeting.mark_recognized(r.task_key)
+            if primary is None:
+                candidates = ambiguous_candidates(turn["text"], agenda)
+                if len(candidates) >= 2:
+                    pending = (line, candidates)
 
             # Push immediately so the new line + task card appear without
             # waiting on the (up to 3s) Groq call below.
@@ -123,6 +132,11 @@ if __name__ == "__main__":
         on_top=True,
         transparent=True,
     )
+
+    def minimize_window():
+        window.minimize()
+
+    window.expose(minimize_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
     webview.start(_run_replay, (window, loaded_event))

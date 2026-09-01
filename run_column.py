@@ -8,9 +8,9 @@ import webview
 from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from hints import get_hints
-from match_core import match
+from match_core import ambiguous_candidates, match
 from meeting import Line, Meeting
-from run_second_screen import LLM_KEY_PATH, TEAM, _WORD_RE, _primary_match, _state_json
+from run_second_screen import LLM_KEY_PATH, TEAM, _WORD_RE, _apply_pending, _primary_match, _state_json
 from sprint_snapshot import load_sprint
 
 
@@ -35,6 +35,7 @@ def _run_replay(window, loaded_event):
         meeting.phase = "live"
 
         t = 0.0
+        pending: tuple[Line, list] | None = None
         for turn in transcript:
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
@@ -43,13 +44,20 @@ def _run_replay(window, loaded_event):
 
             results = match(turn["text"], agenda)
             primary = _primary_match(results)
+            primary, pending = _apply_pending(pending, primary, turn["text"], agenda, meeting)
+
             task_key = primary.task_key if primary else None
             hit_words = primary.hit_words if primary else []
-            meeting.add_line(Line(t=t, who=turn["speaker"], text=turn["text"], task=task_key, hit_words=hit_words))
+            line = Line(t=t, who=turn["speaker"], text=turn["text"], task=task_key, hit_words=hit_words)
+            meeting.add_line(line)
             for r in results:
                 meeting.mark_recognized(r.task_key)
             if primary:
                 meeting.current = primary.task_key
+            else:
+                candidates = ambiguous_candidates(turn["text"], agenda)
+                if len(candidates) >= 2:
+                    pending = (line, candidates)
 
             window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
 
@@ -85,6 +93,11 @@ if __name__ == "__main__":
         on_top=True,
         transparent=True,
     )
+
+    def minimize_window():
+        window.minimize()
+
+    window.expose(minimize_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
     webview.start(_run_replay, (window, loaded_event))

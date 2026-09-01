@@ -29,10 +29,12 @@ _SINGLE = {
 # some of these wrong on their own — e.g. "backend" -> rule-based "бакенд"
 # vs the real "бэкенд"). Sourced from public IT-slang glossaries
 # (javarush.com, hexlet.io, journal.sovcombank.ru), not invented, and this
-# project's own real-data check (Podlodka podcast #251 auto-captions
-# confirmed "review" -> "ревью" as actually-occurring usage). Not
-# exhaustive — extend as real transcripts surface more terms, same spirit as
-# stopwords.py's own "reconstructed, not complete" honesty.
+# project's own real-data checks: Podlodka podcast #251 auto-captions
+# confirmed "review" -> "ревью" as actually-occurring usage; a real recorded
+# team standup (youtube.com/watch?v=n8-KNEfkDOY auto-captions, 2 сен)
+# surfaced "agile" -> "аджайл" as a real gap. Not exhaustive — extend as real
+# transcripts surface more terms, same spirit as stopwords.py's own
+# "reconstructed, not complete" honesty.
 KNOWN_IT_TERMS: dict[str, str] = {
     "sprint": "спринт", "deploy": "деплой", "deployment": "деплой",
     "backend": "бэкенд", "frontend": "фронтенд", "review": "ревью",
@@ -47,7 +49,7 @@ KNOWN_IT_TERMS: dict[str, str] = {
     "kanban": "канбан", "retro": "ретро", "demo": "демо",
     "refactor": "рефактор", "refactoring": "рефакторинг",
     "deadline": "дедлайн", "scope": "скоуп", "approve": "апрув",
-    "approved": "апрувед", "config": "конфиг",
+    "approved": "апрувед", "config": "конфиг", "agile": "аджайл",
 }
 
 

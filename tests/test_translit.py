@@ -32,6 +32,18 @@ def test_is_phonetic_match_true_for_close_transliteration():
     assert is_phonetic_match("backend", "бэкенд") is True
 
 
+def test_is_phonetic_match_true_for_agile():
+    # 2 сен: real gap found running match_core.match() against a real
+    # standup transcript (youtube.com/watch?v=n8-KNEfkDOY auto-captions) — a
+    # task titled "...по Agile" stayed silent on "работал над видео по
+    # аджайлу", the ONLY missing overlap word, because the letter rules alone
+    # get "agile" wrong ("агил", not the real "аджайл" — English's soft "g"
+    # before "i" isn't in _MULTI/_SINGLE) and it wasn't yet in KNOWN_IT_TERMS.
+    assert KNOWN_IT_TERMS["agile"] == "аджайл"
+    assert is_phonetic_match("agile", "аджайл") is True
+    assert is_phonetic_match("agile", "аджайлу") is True
+
+
 def test_is_phonetic_match_true_for_go_market_example():
     # The real case that started this: a Latin task title ("Go Market")
     # spoken/transcribed as Cyrillic phonetics.

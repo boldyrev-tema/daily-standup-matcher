@@ -3,3 +3,7 @@ pymorphy3-dicts-ru
 pytest
 requests
 pywebview
+speechmatics-rt
+sounddevice
+numpy
+audioop-lts; python_version >= "3.13"

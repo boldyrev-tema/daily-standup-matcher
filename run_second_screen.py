@@ -10,12 +10,14 @@ from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from facts import agenda_row, build_facts
 from hints import get_hints
-from match_core import match
+from live_audio import LiveAudioSession
+from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
-from sprint_snapshot import load_sprint
+from sprint_snapshot import Task, load_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
 LLM_KEY_PATH = "~/.credentials/openrouter_api_key.env"
+SPEECHMATICS_KEY_PATH = "~/.credentials/speechmatics_api_key.env"
 _WORD_RE = re.compile(r"[а-яА-ЯёЁa-zA-Z]+")
 
 
@@ -30,6 +32,38 @@ def _primary_match(results):
         return None
     number_matches = [r for r in results if r.reason == "explicit_number"]
     return number_matches[0] if number_matches else results[0]
+
+
+def _apply_pending(
+    pending: tuple[Line, list[Task]] | None,
+    primary: MatchResult | None,
+    text: str,
+    agenda: list[Task],
+    meeting: Meeting,
+) -> tuple[MatchResult | None, tuple[Line, list[Task]] | None]:
+    """Resolve an earlier margin-blocked ambiguous line (see
+    match_core.ambiguous_candidates) using this turn's extra context —
+    Rinat, 2 сен: a genuine tie between two "сделки" tasks resolved on the
+    very next line, leaving the first line permanently unlabeled even though
+    the meeting correctly moved on. Always consumes `pending` (returns None
+    for it); the caller sets a fresh one from this turn if it's itself
+    ambiguous.
+    """
+    if pending is None:
+        return primary, None
+    pending_line, pending_candidates = pending
+    pending_keys = {t.key for t in pending_candidates}
+    if primary is not None and primary.task_key in pending_keys:
+        pending_line.task = primary.task_key
+        pending_line.hit_words = primary.hit_words
+    elif primary is None:
+        resolved = resolve_pending(pending_line.text, pending_candidates, text)
+        if resolved is not None:
+            pending_line.task = resolved.task_key
+            pending_line.hit_words = resolved.hit_words
+            meeting.mark_recognized(resolved.task_key)
+            primary = resolved
+    return primary, None
 
 
 def _agenda_rows(agenda, meeting, alarm_task):
@@ -71,6 +105,45 @@ def _state_json(meeting: Meeting, agenda, alarm_task) -> str:
     })
 
 
+def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending):
+    """One utterance through the full pipeline: match -> pending-carryover
+    resolution -> Meeting/Line bookkeeping -> render -> hints. Shared by the
+    file replay (_run_replay) and the live-microphone path (_run_live) so
+    the two can never drift into different matching behavior. Returns the
+    (possibly updated) pending-ambiguity state for the next call.
+    """
+    results = match(text, agenda)
+    primary = _primary_match(results)
+    primary, pending = _apply_pending(pending, primary, text, agenda, meeting)
+
+    task_key = primary.task_key if primary else None
+    hit_words = primary.hit_words if primary else []
+    line = Line(t=t, who=speaker, text=text, task=task_key, hit_words=hit_words)
+    meeting.add_line(line)
+    for r in results:
+        meeting.mark_recognized(r.task_key)
+    if primary:
+        meeting.current = primary.task_key
+    else:
+        candidates = ambiguous_candidates(text, agenda)
+        if len(candidates) >= 2:
+            pending = (line, candidates)
+
+    window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+
+    if primary:
+        task = next(x for x in agenda if x.key == primary.task_key)
+        said, ask = get_hints(meeting.lines, task, api_key)
+        meeting.set_hints(said, ask)
+        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+
+        while meeting.reveal_next_said():
+            time.sleep(1.2)
+            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+
+    return pending
+
+
 def _run_replay(window, loaded_event):
     try:
         # Wait for the page's real load event instead of guessing a fixed
@@ -92,38 +165,65 @@ def _run_replay(window, loaded_event):
         meeting.phase = "live"
 
         t = 0.0
+        pending: tuple[Line, list] | None = None
         for turn in transcript:
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
             time.sleep(pause)
             t += pause
-
-            results = match(turn["text"], agenda)
-            primary = _primary_match(results)
-            task_key = primary.task_key if primary else None
-            hit_words = primary.hit_words if primary else []
-            meeting.add_line(Line(t=t, who=turn["speaker"], text=turn["text"], task=task_key, hit_words=hit_words))
-            for r in results:
-                meeting.mark_recognized(r.task_key)
-            if primary:
-                meeting.current = primary.task_key
-
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
-
-            if primary:
-                task = next(x for x in agenda if x.key == primary.task_key)
-                said, ask = get_hints(meeting.lines, task, api_key)
-                meeting.set_hints(said, ask)
-                window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
-
-                while meeting.reveal_next_said():
-                    time.sleep(1.2)
-                    window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+            pending = _process_turn(
+                turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending
+            )
 
         meeting.phase = "after"
         window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
     except Exception as e:
         print(f"second screen replay failed: {e}", file=sys.stderr)
+        try:
+            window.evaluate_js(
+                f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
+            )
+        except Exception:
+            pass
+
+
+def _run_live(window, loaded_event):
+    """Live daily: replaces sample_daily_transcript.json with a real
+    Speechmatics stream off the mic (+ system/call audio if
+    SYSTEM_AUDIO_DUMP_PATH is set — see live_audio.py). Matcher, agenda,
+    hints, window — all unchanged, same as _process_turn shared with replay.
+    """
+    try:
+        loaded_event.wait(timeout=10)
+
+        tasks = load_sprint("fixtures/sprint.json")
+        agenda = build_agenda(tasks, TEAM)
+        alarm_task = pick_alarm(agenda)
+        api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
+        speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")
+
+        meeting = Meeting(phase="live", remaining_count=len(agenda))
+        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+
+        state = {"pending": None}
+        lock = threading.Lock()
+        start = time.monotonic()
+
+        def on_turn(speaker: str, text: str) -> None:
+            # Speechmatics calls this from its own asyncio thread — one turn
+            # processed at a time so pending-carryover state can't race.
+            with lock:
+                t = time.monotonic() - start
+                state["pending"] = _process_turn(
+                    speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"]
+                )
+
+        session = LiveAudioSession(speechmatics_key, on_turn)
+        session.start()
+        window.events.closing += session.stop
+        print("Живой микрофон запущен — говорите; закройте окно, чтобы остановить.")
+    except Exception as e:
+        print(f"live run failed: {e}", file=sys.stderr)
         try:
             window.evaluate_js(
                 f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
@@ -142,6 +242,12 @@ if __name__ == "__main__":
         on_top=True,
         transparent=True,
     )
+
+    def minimize_window():
+        window.minimize()
+
+    window.expose(minimize_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
-    webview.start(_run_replay, (window, loaded_event))
+    target = _run_live if "--live" in sys.argv else _run_replay
+    webview.start(target, (window, loaded_event))

@@ -46,7 +46,16 @@ venv/bin/python3 -m pytest -v
   weighted lemma overlap (plus a fuzzy Cyrillic-phonetic alias for Latin
   title words) with a ≥2-significant-word minimum and a score-margin gate
   against the runner-up candidate. Returns a list, since one utterance can
-  mention more than one task.
+  mention more than one task. `ambiguous_candidates()`/`resolve_pending()`
+  give a caller a second chance at a margin-blocked tie using the next
+  utterance as extra context, restricted to the tied set so it can only pick
+  a winner among real contenders, never surface a new one — wired into every
+  replay loop (`_apply_pending()` in `run_second_screen.py`, reused by
+  `run_column.py`/`run_polosa_replay.py`/`replay_driver.py`) so a first line
+  that's genuinely ambiguous on its own gets backfilled once the next line
+  (independently, or merged with the first) disambiguates it. Rinat, 2 сен:
+  a real tie between two "сделки" tasks resolved on the very next line but
+  the first line stayed permanently unlabeled — this closes that gap.
 - `fixtures/sprint.json` — 6 invented tasks (no real company data) covering
   every test case in the spec, including two live-bug regression cases.
 - `facts.py` — deterministic 2-5 line Jira-fact builder from a `Task`.
@@ -71,6 +80,12 @@ venv/bin/python3 -m pytest -v
   scrolling transcript with underlined `hit_words` and "→ KEY" tags, the full
   agenda split by phase with the alarm row in red, all 5 Jira facts, and the
   progressive "Сказали" reveal that "Полоса" computed but never displayed.
+  `--live` swaps the file-transcript replay for a real Speechmatics
+  microphone stream — see "Live microphone" below.
+
+- `live_audio.py` — mic (+ optional system/call audio) -> Speechmatics
+  streaming transcription, one callback per finalized utterance. See "Live
+  microphone" below.
 
 - `column.html` + `run_column.py` — the "Колонка" narrow vertical placement
   (header → Подсказываю → Записал → Слышу, top to bottom), meant to sit as a
@@ -148,13 +163,37 @@ matcher gets the clean-Cyrillic case right and correctly stays silent on
 the unrelated-word misheard case — see
 `test_case13b`/`test_case13c` in `tests/test_match_core.py`.
 
+## Live microphone (`run_second_screen.py --live`)
+
+`live_audio.py` streams microphone audio (+ system/call audio, if enabled —
+see below) to Speechmatics and calls back once per finalized utterance
+(a real pause-based boundary, not per-word). `run_second_screen.py`'s
+`_process_turn()` — the same function the file-replay path uses — takes it
+from there, so live and replay can never drift into different matching
+behavior. Needs `~/.credentials/speechmatics_api_key.env`
+(`SPEECHMATICS_API_KEY=...`) in addition to the OpenRouter key. Adapted from
+a proven PoC (`~/Desktop/Rinat Work/live_copilot_poc/live_copilot_poc.py`,
+tested live 21 авг) — only the audio-capture/streaming-STT plumbing, not its
+LLM/vision layer.
+
+System audio (the other side of the call, labeled "Собеседник") needs the
+`SystemAudioDump` binary from the `cheating-daddy` project — **not bundled
+here** (this repo is public; that binary's license isn't ours to
+redistribute). Point the `SYSTEM_AUDIO_DUMP_PATH` env var at a local copy to
+enable it; without it, only the microphone channel ("Ты") runs.
+
+`--live` is opt-in — `python3 run_second_screen.py` (no flag) still runs the
+deterministic file replay, unchanged, for demos/tests.
+
 ## Known gaps in this iteration
 
-Not implemented: live microphone / Speechmatics STT (still reads an invented
-transcript file), real Jira snapshot (still `fixtures/sprint.json`), speaker
-diarization, the Начать/Сначала button's click handler on "Полоса" and
-"Колонка" (the replay auto-starts instead — see
-`docs/superpowers/specs/2026-08-29-polosa-replay-design.md` for why). The PRD
-gate (3-4 real live dailies with hand-counted recognition/latency) is still
-unmet — only demo-transcript replays, see `docs/superpowers/specs/` project
-memory for details.
+Not yet done: real Jira snapshot (still `fixtures/sprint.json` — the live
+microphone above only replaces the transcript side), speaker diarization on
+the live path (both channels are pre-labeled "Ты"/"Собеседник" by which
+audio device they came from, not detected), the Начать/Сначала button's
+click handler on "Полоса" and "Колонка" (the replay auto-starts instead —
+see `docs/superpowers/specs/2026-08-29-polosa-replay-design.md` for why).
+The PRD gate (3-4 real live dailies with hand-counted recognition/latency)
+is still unmet — replays of a real transcript got close twice, but that's
+not the same as a live mic on a real call; see `docs/superpowers/specs/`
+project memory for details.
