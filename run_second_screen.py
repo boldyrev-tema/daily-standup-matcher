@@ -307,7 +307,9 @@ if __name__ == "__main__":
             )
 
             def close_recap_window():
-                threading.Thread(target=recap_window.destroy, daemon=True).start()
+                # Same fix as the main window's close_window — see its
+                # comment for why a bare thread isn't enough.
+                threading.Timer(0.15, recap_window.destroy).start()
 
             recap_window.expose(close_recap_window)
             recap_loaded_event = threading.Event()
