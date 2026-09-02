@@ -229,9 +229,12 @@ def _run_live(window, loaded_event):
             # see docs/superpowers/specs/2026-09-02-daily-recap-design.md
             # ("Не блокировать закрытие окна").
             def _do_save():
-                records = build_recap(meeting, agenda, api_key)
-                if records:
-                    save_recap(records)
+                try:
+                    records = build_recap(meeting, agenda, api_key)
+                    if records:
+                        save_recap(records)
+                except Exception as e:
+                    print(f"recap save failed: {e}", file=sys.stderr)
 
             threading.Thread(target=_do_save, daemon=False).start()
 

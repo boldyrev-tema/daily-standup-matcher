@@ -48,6 +48,36 @@ def test_build_recap_groups_lines_by_task_and_calls_get_hints_per_task():
     assert calls[1] == ("NOVA-2", ["Экспорт готов"], None)
 
 
+def test_build_recap_includes_untagged_lines_between_recognition_points():
+    # Real matching pipeline: only the ONE utterance whose own text matched
+    # gets .task set (see run_second_screen.py's _process_turn) — the
+    # conversational follow-up around it doesn't. A recap that only kept
+    # .task-tagged lines would see just the trigger line and miss the
+    # actual discussion.
+    lines = [
+        Line(t=1.0, who="Дарья", text="Дубли платежей почти убраны", task="NOVA-1"),
+        Line(t=3.0, who="Максим", text="Отлично, когда сможешь смёржить?", task=None),
+        Line(t=4.0, who="Дарья", text="Сегодня вечером", task=None),
+        Line(t=10.0, who="Максим", text="Экспорт в CSV готов", task="NOVA-2"),
+    ]
+    meeting = _meeting_with(lines, done=["NOVA-1", "NOVA-2"])
+    calls = []
+
+    def fake_get_hints(task_lines, task, api_key, lookback_seconds=None):
+        calls.append((task.key, [l.text for l in task_lines]))
+        return ([f"said about {task.key}"], None)
+
+    with patch("recap.get_hints", side_effect=fake_get_hints):
+        build_recap(meeting, [TASK_A, TASK_B], api_key="fake")
+
+    assert calls[0] == ("NOVA-1", [
+        "Дубли платежей почти убраны",
+        "Отлично, когда сможешь смёржить?",
+        "Сегодня вечером",
+    ])
+    assert calls[1] == ("NOVA-2", ["Экспорт в CSV готов"])
+
+
 def test_build_recap_skips_tasks_with_empty_said():
     lines = [Line(t=1.0, who="Дарья", text="...", task="NOVA-1")]
     meeting = _meeting_with(lines, done=["NOVA-1"])

@@ -15,14 +15,45 @@ def build_recap(meeting: Meeting, agenda: list[Task], api_key: str) -> list[dict
     the live meeting.said/meeting.ask fields, which get reset every time
     mark_recognized() moves to a new task — see
     docs/superpowers/specs/2026-09-02-daily-recap-design.md.
+
+    Lines are grouped by TIME SEGMENT between consecutive recognition
+    points, not by exact line.task match. The matcher (see
+    run_second_screen.py's _process_turn) only tags the ONE utterance whose
+    own text triggered recognition — clarifications and follow-up chatter
+    about the same task get line.task=None. A segment for a task starts at
+    the timestamp of its first recognized line and runs up to the next
+    task's first recognized line (or to the end of the meeting), so all the
+    surrounding discussion is captured, not just the trigger line.
     """
     tasks_by_key = {task.key: task for task in agenda}
+
+    recognized_at: dict[str, float] = {}
+    for line in meeting.lines:
+        if line.task is None:
+            continue
+        if line.task not in recognized_at:
+            recognized_at[line.task] = line.t
+
     records = []
-    for key in meeting.done:
+    for i, key in enumerate(meeting.done):
         task = tasks_by_key.get(key)
         if task is None:
             continue
-        task_lines = [line for line in meeting.lines if line.task == key]
+        start = recognized_at.get(key)
+        if start is None:
+            continue
+
+        end = None
+        for later_key in meeting.done[i + 1:]:
+            if later_key in recognized_at:
+                end = recognized_at[later_key]
+                break
+
+        if end is None:
+            task_lines = [line for line in meeting.lines if line.t >= start]
+        else:
+            task_lines = [line for line in meeting.lines if start <= line.t < end]
+
         said, _ask = get_hints(task_lines, task, api_key, lookback_seconds=None)
         if not said:
             continue
