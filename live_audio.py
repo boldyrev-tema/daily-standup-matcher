@@ -35,12 +35,54 @@ MIC_SAMPLE_RATE = 16000
 SYS_SAMPLE_RATE = 24000  # SystemAudioDump's native output rate
 SYSTEM_AUDIO_DUMP_PATH = os.environ.get("SYSTEM_AUDIO_DUMP_PATH", "")
 
+# Real hardware self-noise is never bit-exact zero across a whole buffer —
+# only a blocked/unnegotiated audio path (e.g. AirPods stuck outside HFP
+# mode) produces that. A low threshold catches "device isn't delivering
+# audio at all" without requiring the user to be actively speaking during
+# the startup probe.
+_SILENCE_PEAK_THRESHOLD = 1
+_PROBE_SECONDS = 0.4
 
-def _pick_mic_device() -> int | None:
-    for i, dev in enumerate(sd.query_devices()):
-        if dev["max_input_channels"] > 0 and "macbook" in dev["name"].lower():
-            return i
-    return None
+
+def _record_probe(device_index: int, duration: float = _PROBE_SECONDS, sr: int = MIC_SAMPLE_RATE):
+    rec = sd.rec(int(duration * sr), samplerate=sr, channels=1, dtype="int16", device=device_index)
+    sd.wait()
+    return rec
+
+
+def pick_working_input_device(devices=None, default_index=None, record=_record_probe):
+    """Returns an input device index that actually delivers audio, probing
+    the OS default first and falling back to other input-capable devices if
+    it's silent. Verified live 2 сен: the OS default was AirPods Pro, whose
+    Bluetooth mic channel returned exact-zero samples (never negotiated HFP
+    mode) while the built-in mic captured real speech fine — the earlier
+    "always trust the OS default" fix didn't account for a default that's
+    silent. Falls back to default_index itself if every device is silent
+    (or every probe errors), so the caller still gets a usable value instead
+    of None.
+    """
+    if devices is None:
+        devices = sd.query_devices()
+    if default_index is None:
+        default_index = sd.default.device[0]
+    input_indices = [i for i, d in enumerate(devices) if d.get("max_input_channels", 0) > 0]
+    ordered = [default_index] + [i for i in input_indices if i != default_index]
+    for idx in ordered:
+        if idx not in input_indices:
+            continue
+        try:
+            samples = record(idx)
+        except Exception:
+            continue
+        if int(np.abs(samples).max()) > _SILENCE_PEAK_THRESHOLD:
+            if idx != default_index:
+                print(
+                    f'Микрофон по умолчанию ("{devices[default_index]["name"]}") не отдаёт звук — '
+                    f'переключаюсь на "{devices[idx]["name"]}"'
+                )
+            return idx
+    print("Ни одно устройство ввода не отдало звук на пробе — использую системный дефолт как есть")
+    return default_index
 
 
 class LiveAudioSession:
@@ -136,9 +178,13 @@ class LiveAudioSession:
         def callback(indata, frames, time_info, status):
             q.put(bytes(indata))
 
-        with sd.InputStream(
-            samplerate=MIC_SAMPLE_RATE, channels=1, dtype="int16", callback=callback, device=_pick_mic_device()
-        ):
+        # Trust the OS default first, but verify it actually delivers audio —
+        # see pick_working_input_device: an earlier by-name heuristic was
+        # replaced with "just use the OS default", which in turn broke the
+        # very same day when the default was AirPods stuck outside HFP mode
+        # (silent). Probing before committing to a device covers both cases.
+        device = pick_working_input_device()
+        with sd.InputStream(samplerate=MIC_SAMPLE_RATE, channels=1, dtype="int16", callback=callback, device=device):
             while self.running:
                 try:
                     chunk = q.get(timeout=1)
