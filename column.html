@@ -6,6 +6,7 @@
 <style>
   :root {
     --page-bg: rgba(19,18,23,.86);
+    --solid-bg: #131217;
     --line: rgba(255,255,255,.09);
     --ink: #F2F0EE;
     --dim: #9C97A3;
@@ -15,6 +16,31 @@
     --accent-text: #D6C8FF;
     --accent-bg: rgba(139,92,246,.16);
     --accent-border: rgba(139,92,246,.5);
+    --btn-bg: #F2F0EE;
+    --btn-text: #111111;
+    --control-bg: rgba(255,255,255,.08);
+    --control-hover: rgba(255,255,255,.16);
+    --edge-highlight: rgba(255,255,255,.12);
+  }
+  /* Rinat's MagicPath light mockup (designs.magicpath.ai/v1/boldly-dusk-9705) —
+     same layout/tokens, light palette instead of the dark default above. */
+  :root[data-theme="light"] {
+    --page-bg: rgba(255,255,255,.92);
+    --solid-bg: #ffffff;
+    --line: rgba(0,0,0,.08);
+    --ink: #17151A;
+    --dim: #86828C;
+    --mute: #B4B0B8;
+    --live: #2E9E5B;
+    --alarm: #D14343;
+    --accent-text: #6D28D9;
+    --accent-bg: rgba(124,58,237,.08);
+    --accent-border: rgba(124,58,237,.35);
+    --btn-bg: #17151A;
+    --btn-text: #ffffff;
+    --control-bg: rgba(0,0,0,.06);
+    --control-hover: rgba(0,0,0,.1);
+    --edge-highlight: rgba(255,255,255,.6);
   }
   * { box-sizing: border-box; }
   html, body {
@@ -23,12 +49,13 @@
   }
   body {
     background: var(--page-bg);
-    backdrop-filter: blur(18px);
+    border-top: 1px solid var(--edge-highlight);
+    backdrop-filter: blur(18px) saturate(180%);
     color: var(--ink);
     overflow: hidden;
   }
   @media (prefers-reduced-transparency: reduce) {
-    body { background: #131217; backdrop-filter: none; }
+    body { background: var(--solid-bg); backdrop-filter: none; }
   }
 
   .app { display: flex; flex-direction: column; height: calc(100vh - 33px); overflow-y: auto; }
@@ -94,20 +121,28 @@
     font-size: 14px; line-height: 1.4;
   }
 
-  .minimize-btn {
+  .window-controls {
     position: fixed; top: 10px; right: 12px; z-index: 10;
+    display: flex; gap: 6px;
+  }
+  .window-controls button {
     width: 22px; height: 22px; border-radius: 50%;
-    background: rgba(255,255,255,.08); border: none; color: var(--dim);
+    background: var(--control-bg); border: none; color: var(--dim);
     font-size: 15px; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: background 140ms ease, color 140ms ease;
   }
-  .minimize-btn:hover { background: rgba(255,255,255,.16); color: var(--ink); }
-  .minimize-btn:active { transform: scale(.92); }
+  .window-controls button:hover { background: var(--control-hover); color: var(--ink); }
+  .window-controls button:active { transform: scale(.92); }
+  #theme-btn { font-size: 12px; }
 </style>
 </head>
 <body>
-  <button class="minimize-btn" id="minimize-btn" title="Свернуть" aria-label="Свернуть окно">–</button>
+  <div class="window-controls">
+    <button id="theme-btn" title="Сменить тему" aria-label="Сменить тему">🌙</button>
+    <button id="minimize-btn" title="Свернуть" aria-label="Свернуть окно">–</button>
+    <button id="close-btn" title="Закрыть" aria-label="Закрыть окно">×</button>
+  </div>
   <div class="app">
     <div class="section header">
       <span class="live-dot" id="live-dot" style="display:none;"></span>
@@ -302,6 +337,24 @@ document.getElementById("minimize-btn").addEventListener("click", () => {
     window.pywebview.api.minimize_window();
   }
 });
+document.getElementById("close-btn").addEventListener("click", () => {
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.close_window();
+  }
+});
+
+function setTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.getElementById("theme-btn").textContent = theme === "light" ? "☀" : "🌙";
+  try { localStorage.setItem("theme", theme); } catch (e) {}
+}
+document.getElementById("theme-btn").addEventListener("click", () => {
+  const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  setTheme(current === "light" ? "dark" : "light");
+});
+let savedTheme = "dark";
+try { savedTheme = localStorage.getItem("theme") || "dark"; } catch (e) {}
+setTheme(savedTheme);
 </script>
 </body>
 </html>

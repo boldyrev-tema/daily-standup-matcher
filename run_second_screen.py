@@ -246,7 +246,10 @@ if __name__ == "__main__":
     def minimize_window():
         window.minimize()
 
-    window.expose(minimize_window)
+    def close_window():
+        window.destroy()
+
+    window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
     target = _run_live if "--live" in sys.argv else _run_replay
