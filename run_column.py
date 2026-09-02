@@ -98,10 +98,11 @@ if __name__ == "__main__":
         window.minimize()
 
     def close_window():
-        # See run_second_screen.py's close_window — destroying the window
-        # synchronously inside this JS-bridge callback leaves it stuck
-        # showing a perpetual loading state instead of closing.
-        threading.Thread(target=window.destroy, daemon=True).start()
+        # See run_second_screen.py's close_window — window.destroy() ending
+        # the run loop before this call's own JS response goes out can
+        # deadlock the whole process (confirmed live via py-spy). A short
+        # delay lets the response go out first.
+        threading.Timer(0.15, window.destroy).start()
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()

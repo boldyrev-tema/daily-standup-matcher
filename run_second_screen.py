@@ -221,7 +221,16 @@ def _run_live(window, loaded_event):
 
         session = LiveAudioSession(speechmatics_key, on_turn)
         session.start()
-        window.events.closing += session.stop
+        # events.closed, not events.closing: closing only fires via Cocoa's
+        # windowShouldClose_ delegate method, which performClose_ (the
+        # native red button / Cmd+W) triggers but a direct .close() call
+        # does not — and our own close_window() calls window.destroy(),
+        # which goes straight to .close(). closed fires unconditionally
+        # from windowWillClose_ regardless of how the window closed
+        # (confirmed by reading webview/platforms/cocoa.py directly, 2 сен:
+        # neither session.stop() nor the recap save were ever actually
+        # firing on our own close button — only closing was wired up).
+        window.events.closed += session.stop
 
         def _save_recap_on_close():
             # Non-daemon: closing the window must not wait for this, but the
@@ -238,7 +247,7 @@ def _run_live(window, loaded_event):
 
             threading.Thread(target=_do_save, daemon=False).start()
 
-        window.events.closing += _save_recap_on_close
+        window.events.closed += _save_recap_on_close
         print("Живой микрофон запущен — говорите; закройте окно, чтобы остановить.")
     except Exception as e:
         print(f"live run failed: {e}", file=sys.stderr)
@@ -265,13 +274,17 @@ if __name__ == "__main__":
         window.minimize()
 
     def close_window():
-        # destroy() called synchronously from inside this JS-bridge callback
-        # left the window stuck showing a perpetual loading state instead of
-        # closing (2 сен, live click test) — the callback's own thread is
-        # what pywebview uses to deliver the JS promise result, and tearing
-        # the window down mid-delivery never lets that resolve. Detaching
-        # the destroy onto its own thread lets this call return normally.
-        threading.Thread(target=window.destroy, daemon=True).start()
+        # window.destroy() ends the Cocoa run loop webview.start() is
+        # driving. If that happens before THIS exposed call's own return
+        # value has gone back to JS (also delivered through that same main-
+        # thread run loop via evaluate_js), the two race — and can deadlock
+        # forever, not just stall. Confirmed live via a py-spy thread dump
+        # (2 сен): the main thread was stuck in threading._shutdown() while
+        # pywebview's own JS-bridge response thread sat blocked in
+        # evaluate_js, waiting on a run loop that no longer existed. A short
+        # delay lets this call's own response go out first, on a still-live
+        # run loop, before destroy() ends it.
+        threading.Timer(0.15, window.destroy).start()
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
