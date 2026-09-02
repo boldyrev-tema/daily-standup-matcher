@@ -53,9 +53,10 @@ venv/bin/python3 -m pytest -v
   replay loop (`_apply_pending()` in `run_second_screen.py`, reused by
   `run_column.py`/`run_polosa_replay.py`/`replay_driver.py`) so a first line
   that's genuinely ambiguous on its own gets backfilled once the next line
-  (independently, or merged with the first) disambiguates it. Rinat, 2 сен:
-  a real tie between two "сделки" tasks resolved on the very next line but
-  the first line stayed permanently unlabeled — this closes that gap.
+  (independently, or merged with the first) disambiguates it. Found live on a
+  real daily, 2 сен: a real tie between two "сделки" tasks resolved on the
+  very next line but the first line stayed permanently unlabeled — this
+  closes that gap.
 - `fixtures/sprint.json` — 6 invented tasks (no real company data) covering
   every test case in the spec, including two live-bug regression cases.
 - `facts.py` — deterministic 2-5 line Jira-fact builder from a `Task`.
@@ -96,6 +97,10 @@ venv/bin/python3 -m pytest -v
   to the last 3 lines instead of a full scroll, and a phase-driven header
   ("Сегодня, HH:MM" / "N мин" + live dot / "Закончился · обсудили N из M").
   See `docs/superpowers/specs/2026-08-30-column-design.md`.
+
+- `recap.py` — builds/saves/loads the post-daily recap, see "Post-daily
+  recap" below.
+- `recap.html` — the small standalone window that shows a saved recap.
 
 ## Why OpenRouter, not Groq
 
@@ -172,9 +177,17 @@ see below) to Speechmatics and calls back once per finalized utterance
 from there, so live and replay can never drift into different matching
 behavior. Needs `~/.credentials/speechmatics_api_key.env`
 (`SPEECHMATICS_API_KEY=...`) in addition to the OpenRouter key. Adapted from
-a proven PoC (`~/Desktop/Rinat Work/live_copilot_poc/live_copilot_poc.py`,
-tested live 21 авг) — only the audio-capture/streaming-STT plumbing, not its
-LLM/vision layer.
+a proven PoC (this author's own `live_copilot_poc` project, tested live
+21 авг) — only the audio-capture/streaming-STT plumbing, not its LLM/vision
+layer.
+
+Device selection probes the OS default input first and falls back to
+another input device if it's silent (`pick_working_input_device()`) —
+found live, 2 сен: the OS default was a Bluetooth headset stuck outside its
+mic-capable mode, returning exact-zero samples with no error; the built-in
+mic worked fine. Real hardware self-noise is never bit-exact zero, so a
+near-zero probe reliably tells "not delivering audio" apart from "device is
+just quiet."
 
 System audio (the other side of the call, labeled "Собеседник") needs the
 `SystemAudioDump` binary from the `cheating-daddy` project — **not bundled
@@ -184,6 +197,30 @@ enable it; without it, only the microphone channel ("Ты") runs.
 
 `--live` is opt-in — `python3 run_second_screen.py` (no flag) still runs the
 deterministic file replay, unchanged, for demos/tests.
+
+## Post-daily recap (`recap.py` + `recap.html`)
+
+On closing a `--live` window, the app builds a short recap of what was
+discussed per task and saves it to `recaps/*.json` (gitignored — real
+transcript content, this repo is public). On the next `--live` launch, if a
+saved recap exists, a small separate window opens next to the main one
+showing it.
+
+The matcher only tags the ONE utterance that actually triggered task
+recognition (`Line.task`) — the rest of a task's discussion (clarifications,
+"when can you merge that", "tonight") never gets tagged, since `match()`
+only looks at each utterance's own text. `build_recap()` groups
+`meeting.lines` by time segment between consecutive recognition points
+instead of by that narrow tag, so the recap covers the actual conversation,
+not just the trigger line — then calls the same `hints.get_hints()` used for
+the live "Сказали" hints, with a new `lookback_seconds=None` mode that skips
+its normal 90-second window (a full-task summary needs everything, not just
+the last 90s of it).
+
+Generation runs in a non-daemon background thread on window close: the
+window closes immediately, but the process itself stays alive a few extra
+seconds to finish the LLM calls and write the file — see
+`docs/superpowers/specs/2026-09-02-daily-recap-design.md`.
 
 ## Known gaps in this iteration
 
