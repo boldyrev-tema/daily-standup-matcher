@@ -61,8 +61,11 @@ def _task_card(task: Task) -> str:
     return "\n".join(parts)
 
 
-def _recent_lines_text(lines: list[Line], now_t: float) -> str:
-    recent = [l for l in lines if now_t - l.t <= LOOKBACK_SECONDS]
+def _recent_lines_text(lines: list[Line], now_t: float, lookback_seconds: float | None) -> str:
+    if lookback_seconds is None:
+        recent = lines
+    else:
+        recent = [l for l in lines if now_t - l.t <= lookback_seconds]
     return "\n".join(f"{l.who or '?'}: {l.text}" for l in recent)
 
 
@@ -91,14 +94,19 @@ def _request_hints(payload: dict, api_key: str, timeout: float) -> tuple[list[st
 
 
 def get_hints(
-    lines: list[Line], task: Task, api_key: str, timeout: float = 6.0
+    lines: list[Line],
+    task: Task,
+    api_key: str,
+    timeout: float = 6.0,
+    lookback_seconds: float | None = LOOKBACK_SECONDS,
 ) -> tuple[list[str], str | None]:
     if not lines:
         return [], None
     now_t = lines[-1].t
+    window_label = "за последние 90с" if lookback_seconds is not None else "за всё обсуждение"
     user_content = (
         f"Карточка задачи:\n{_task_card(task)}\n\n"
-        f"Реплики за последние 90с:\n{_recent_lines_text(lines, now_t)}"
+        f"Реплики {window_label}:\n{_recent_lines_text(lines, now_t, lookback_seconds)}"
     )
     # Walk the fallback chain instead of retrying the same model — a free
     # model's backend having a bad minute is common enough (see MODEL_CHAIN

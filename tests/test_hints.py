@@ -77,3 +77,19 @@ def test_get_hints_only_uses_last_90_seconds():
     user_content = captured["payload"]["messages"][1]["content"]
     assert "Свежая реплика" in user_content
     assert "Реплика минуту назад" not in user_content
+
+
+def test_get_hints_lookback_none_includes_everything():
+    old_line = Line(t=1.0, who="Кто-то", text="Реплика минуту назад")
+    recent_line = Line(t=95.0, who="Дарья", text="Свежая реплика")
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["payload"] = json
+        return _mock_response({"said": [], "ask": None})
+
+    with patch("hints.requests.post", side_effect=fake_post):
+        get_hints([old_line, recent_line], TASK, api_key="fake", lookback_seconds=None)
+    user_content = captured["payload"]["messages"][1]["content"]
+    assert "Свежая реплика" in user_content
+    assert "Реплика минуту назад" in user_content
