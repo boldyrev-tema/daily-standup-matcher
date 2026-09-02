@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- No code in this project touches `~/Desktop/Rinat Work/live_copilot_poc` or `~/Desktop/Rinat Work/meeting_copilot` — fully standalone.
-- No test data or committed fixture may copy real Tranio task titles, sprint data, or coworker names verbatim. `fixtures/sample_daily_transcript.json` and `fixtures/sprint.json` are existing invented (NOVA-scenario) fixtures — reuse them as-is, do not replace with real data.
+- No code in this project touches `~/Desktop/the client Work/live_copilot_poc` or `~/Desktop/the client Work/meeting_copilot` — fully standalone.
+- No test data or committed fixture may copy real client task titles, sprint data, or coworker names verbatim. `fixtures/sample_daily_transcript.json` and `fixtures/sprint.json` are existing invented (NOVA-scenario) fixtures — reuse them as-is, do not replace with real data.
 - `git commit` after every task in this project's own repo (`~/Desktop/Bot TG/daily_standup_matcher`), never `--no-verify`. No push to any remote unless asked.
 - `MatchResult` and `Line` stay backward compatible — the new fields (`hit_words` on both) get defaults so every existing test in the 60-test suite keeps passing unmodified.
 - "Колонка" (the third physical placement) is explicitly out of scope for this plan — same principle, different template, a separate future pass.
@@ -1031,5 +1031,5 @@ git commit -m "Task 5: run_second_screen.py — pywebview wiring, real Groq, REA
 - **Spec coverage:** `hit_words` on `MatchResult`/`_hit_words()` (Task 1), public `age_label` + `agenda_row()` (Task 2), `hit_words` on `Line` (Task 3), all three "Слышу"/"Записал"/"Подсказываю" columns incl. underline+inline tag, phase-dependent agenda sections with alarm row, all 5 facts, progressive "Сказали" (Task 4), pywebview wiring mirroring `polosa.html`/`run_polosa_replay.py` + integration test on the `_state_json` contract (Task 5). "Колонка" and live-mic/real-Jira explicitly out of scope, matching the spec's own "Не входит" section.
 - **No placeholders:** every step has runnable code; the manual-check steps (Task 4 Step 2, Task 5 Step 5) specify exact expected visual results, not "verify it looks right."
 - **Type/name consistency checked:** `MatchResult(task_key, confidence, reason, hit_words)`, `_hit_words(tokens, lemmas, title_lemmas)`, `age_label(updated_at, now)`, `agenda_row(task, is_alarm, now)`, `Line(t, who, text, task, hit_words)`, `_state_json(meeting, agenda, alarm_task)`, `_agenda_rows(agenda, meeting, alarm_task)` — spelled identically everywhere used across tasks.
-- **Real-data check:** no task commits real Tranio titles/names/keys — Task 4's manual-check payload and all new tests reuse the existing invented NOVA-scenario fixtures/data already in the repo.
+- **Real-data check:** no task commits real client titles/names/keys — Task 4's manual-check payload and all new tests reuse the existing invented NOVA-scenario fixtures/data already in the repo.
 - **Cumulative test count check:** 60 (baseline, confirmed by running the suite) → 67 (Task 1, +7) → 72 (Task 2, +5) → 74 (Task 3, +2) → 74 (Task 4, no automated tests, leaf HTML) → 81 (Task 5, +7).

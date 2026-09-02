@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a standalone Python module that, given a synthetic Jira-sprint snapshot and a finalized speech utterance, recognizes which sprint task(s) are being discussed — or stays silent when unsure — reconstructing the mechanism described in Rinat's techspec without access to his real code or transcripts.
+**Goal:** Build a standalone Python module that, given a synthetic Jira-sprint snapshot and a finalized speech utterance, recognizes which sprint task(s) are being discussed — or stays silent when unsure — reconstructing the mechanism described in the client's techspec without access to his real code or transcripts.
 
 **Architecture:** Two independent pure-function stages with no shared state between calls (besides a per-call IDF cache): `agenda.py` turns a raw task list into a filtered, sorted, ≤6-item agenda with at most one alarm task; `match_core.py` turns (utterance, agenda) into a list of recognized tasks via a number channel (explicit digits in speech) and a word-overlap channel (IDF-weighted lemma overlap with a ≥2-word minimum and a stopword discount), both honoring the "when in doubt, stay silent" rule via a score threshold + margin gate.
 
@@ -14,7 +14,7 @@
 
 - No code in this project touches `~/Desktop/live_copilot_poc` or `~/Desktop/meeting_copilot` — this is a fully standalone project (spec: "Архитектура").
 - No network calls, no real Jira access — `sprint_snapshot.py` reads only a local JSON fixture (spec: "Не входит в эту итерацию").
-- No test data may copy real Tranio task titles, sprint data, or coworker names verbatim — all fixtures use invented data (spec: "Известные ограничения реконструкции").
+- No test data may copy real client task titles, sprint data, or coworker names verbatim — all fixtures use invented data (spec: "Известные ограничения реконструкции").
 - Lemmatization uses `pymorphy3`, not `pymorphy2` (verified incompatible with this machine's Python 3.14).
 - `match()` returns `list[MatchResult]`, never a single `Optional[MatchResult]` — multiple tasks can be mentioned in one utterance (spec: `match_core.py` section).
 - Stopwords apply a ×⅓ weight discount, they are never fully removed from consideration (spec: `stopwords.py` section).
@@ -65,7 +65,7 @@ Expected: installs succeed, no errors (already verified working on this machine'
 
 - [x] **Step 3: Write the fixture data — `fixtures/sprint.json`**
 
-Six invented tasks, none copied from real Tranio data. Keys share a fictional project prefix (`NOVA`) and have unique 3-digit suffixes (used later by the number-channel tests). Statuses/assignees are placeholders — the interesting content is the titles and dates, both needed by later tasks.
+Six invented tasks, none copied from real client data. Keys share a fictional project prefix (`NOVA`) and have unique 3-digit suffixes (used later by the number-channel tests). Statuses/assignees are placeholders — the interesting content is the titles and dates, both needed by later tasks.
 
 ```json
 [
@@ -225,7 +225,7 @@ def test_content_word_gets_full_weight():
 
 
 def test_stopword_list_is_reasonably_sized():
-    # Not Rinat's real 142-word list (we don't have it) — but should be a
+    # Not the client's real 142-word list (we don't have it) — but should be a
     # real reconstruction, not a token gesture.
     assert len(STOPWORDS) >= 15
 ```
@@ -248,7 +248,7 @@ STOPWORDS: frozenset[str] = frozenset({
 
 
 def stopword_discount(word: str) -> float:
-    """Rinat's spec: background speech words are three times cheaper,
+    """the client's spec: background speech words are three times cheaper,
     never fully removed from consideration."""
     return 1 / 3 if word in STOPWORDS else 1.0
 ```
@@ -285,7 +285,7 @@ from lemmatize import lemmatize
 
 
 def test_lemmatize_collapses_grammatical_case():
-    # Rinat's documented live bug: "сделок" (speech) never matched
+    # the client's documented live bug: "сделок" (speech) never matched
     # "сделка"/"сделки" (title) because his matcher compared raw strings.
     assert lemmatize(["сделок"]) == ["сделка"]
     assert lemmatize(["сделки"]) == ["сделка"]
@@ -337,7 +337,7 @@ Expected: 4 passed
 
 ```bash
 git add lemmatize.py tests/test_lemmatize.py
-git commit -m "Add lemmatize.py: pymorphy3 wrapper, verified against Rinat's documented stemmer bug"
+git commit -m "Add lemmatize.py: pymorphy3 wrapper, verified against the client's documented stemmer bug"
 ```
 
 ---
@@ -444,7 +444,7 @@ def build_agenda(tasks: list[Task], team: list[str]) -> list[Task]:
 
 def pick_alarm(agenda: list[Task], now: datetime | None = None) -> Task | None:
     """Exactly one task per daily gets flagged, never a per-task boolean —
-    confirmed against Rinat's live MagicPath demo: of two "reopened" tasks
+    confirmed against the client's live MagicPath demo: of two "reopened" tasks
     in the same agenda, only the older one was highlighted."""
     now = now or datetime.now(timezone.utc)
 
@@ -506,7 +506,7 @@ def _task(key, title):
 
 
 def test_extract_number_mentions_finds_digit_sequences():
-    # Confirmed live against Rinat's MagicPath demo playback: a spoken
+    # Confirmed live against the client's MagicPath demo playback: a spoken
     # number ("двенадцать четыреста двенадцать") already arrives in the
     # transcript as digits ("...с Legacy 412"), not words — Speechmatics
     # normalizes it before the matcher ever sees the text.
@@ -656,8 +656,8 @@ def test_case2_exact_title_word_match():
     assert results[0].reason == "title_words"
 
 
-def test_case3_regression_word_form_mismatch_from_rinats_bug():
-    # Mirrors Rinat's documented live bug (SITE-12160, "сделок" vs
+def test_case3_regression_word_form_mismatch_from_clients_bug():
+    # Mirrors the client's documented live bug (SITE-12160, "сделок" vs
     # "сделка"/"сделки") in our own invented domain: only "клиентов" is an
     # exact string match (1 word, below the 2-word minimum) — lemmatization
     # additionally surfaces "карточка" and "сделка", clearing the bar.
@@ -670,7 +670,7 @@ def test_case3_regression_word_form_mismatch_from_rinats_bug():
 
 
 def test_case3b_second_regression_found_watching_the_full_demo():
-    # Independently found while watching Rinat's demo play to the end
+    # Independently found while watching the client's demo play to the end
     # (SITE-12170, "функциональная задача для сделок" vs title "Функционал
     # задач для сделок") — same bug class, not in his documented list.
     results = match("готова функциональная заявка для поставщиков", AGENDA)
@@ -804,11 +804,11 @@ git commit -m "Add match(): number + word channels, silence-when-unsure gate, al
 ```markdown
 # daily_standup_matcher
 
-Reconstruction of the "ядро без интерфейса" (core, no UI) slice from Rinat's
+Reconstruction of the "ядро без интерфейса" (core, no UI) slice from the client's
 daily-standup-copilot techspec — recognizes which sprint task is being
 discussed from a finalized speech utterance, or stays silent when unsure.
 
-Built without access to Rinat's real code, real Fireflies transcripts, or a
+Built without access to the client's real code, real Fireflies transcripts, or a
 real Jira snapshot — see `docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md`
 for what's a faithful reconstruction vs. an explicitly-flagged assumption.
 
@@ -839,14 +839,14 @@ venv/bin/python3 -m pytest -v
   weighted lemma overlap with a ≥2-word minimum and a score-margin gate
   against the runner-up candidate. Returns a list, since one utterance can
   mention more than one task.
-- `fixtures/sprint.json` — 6 invented tasks (no real Tranio data) covering
+- `fixtures/sprint.json` — 6 invented tasks (no real client data) covering
   every test case in the spec, including two live-bug regression cases.
 
 ## Known gaps (see spec for full list)
 
 Not implemented in this slice: any UI, `live_copilot_poc` integration, real
 Jira access, speaker diarization, the LLM layer, or delay measurement on a
-real daily. The stopword list is a reconstruction (Rinat's real 142-word
+real daily. The stopword list is a reconstruction (the client's real 142-word
 list isn't available); the alarm/sort criteria and the number-format
 behavior *are* the real spec's, confirmed against the primary source and a
 live demo playback.

@@ -6,14 +6,14 @@
 
 **Architecture:** Six new small modules on top of the already-implemented `sprint_snapshot.py`/`agenda.py`/`match_core.py`/`stopwords.py`/`lemmatize.py` (34 tests passing, commits `fdfab22`..`a9c8a3f`). `replay_driver.py` turns a list of utterances into `match()` calls and folds results into a `Meeting` (from `meeting.py`); `facts.py` derives the deterministic Jira-fact lines from a `Task`; `hints.py` makes the real Groq call for the LLM layer; `polosa.html` + `run_polosa_replay.py` render `Meeting` state in a pywebview window using the exact techspec style tokens and the apple-design motion rules already finalized in the spec.
 
-**Tech Stack:** Python 3.14 (this project's `venv`), new deps `requests` (Groq REST call — matches the pattern already proven in `~/Desktop/Rinat Work/meeting_copilot`, not the `groq` SDK) and `pywebview` (overlay window), stdlib `dataclasses`/`re`/`json`/`time` for everything else, `pytest` for tests.
+**Tech Stack:** Python 3.14 (this project's `venv`), new deps `requests` (Groq REST call — matches the pattern already proven in `~/Desktop/the client Work/meeting_copilot`, not the `groq` SDK) and `pywebview` (overlay window), stdlib `dataclasses`/`re`/`json`/`time` for everything else, `pytest` for tests.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-polosa-replay-design.md` — read it alongside this plan.
 
 ## Global Constraints
 
-- No code in this project touches `~/Desktop/Rinat Work/live_copilot_poc` or `~/Desktop/Rinat Work/meeting_copilot` — fully standalone (same constraint as the core plan).
-- No test data or committed fixture may copy real Tranio task titles, sprint data, or coworker names verbatim — this includes the new integration test in Task 5. The real 44-line demo transcript used for this project's earlier manual validation stays in scratchpad only, never committed here.
+- No code in this project touches `~/Desktop/the client Work/live_copilot_poc` or `~/Desktop/the client Work/meeting_copilot` — fully standalone (same constraint as the core plan).
+- No test data or committed fixture may copy real client task titles, sprint data, or coworker names verbatim — this includes the new integration test in Task 5. The real 44-line demo transcript used for this project's earlier manual validation stays in scratchpad only, never committed here.
 - `git commit` after every task in this project's own repo (`~/Desktop/Bot TG/daily_standup_matcher`), never `--no-verify`. No push to any remote unless asked.
 - `Task` stays a frozen dataclass — new fields get defaults so existing fixtures/tests keep working unmodified.
 - `hit_words`/transcript word-underlining is explicitly out of scope for this plan (user's explicit choice during brainstorming) — no task implements it, no TODO left in code about it.
@@ -719,7 +719,7 @@ git commit -m "Task 4: hints.py — real Groq call for said/ask per techspec con
 - Consumes: `match()` (from `match_core.py`), `Task`/`load_sprint` (from `sprint_snapshot.py`), `build_agenda` (from `agenda.py`), `Line`/`Meeting` (from Task 3).
 - Produces: `replay(transcript: list[dict], agenda: list[Task]) -> Meeting` — `transcript` items are `{"speaker": str, "text": str}`.
 
-**Note on test data:** this integration test needs a multi-turn dialogue longer than the existing `fixtures/sprint.json` test cases exercise together. It's invented (NOVA scenario, same as the rest of the project), NOT the real 28.08 demo transcript used for this project's manual validation — that real transcript stays in scratchpad per the project's own rule against committing real Tranio data.
+**Note on test data:** this integration test needs a multi-turn dialogue longer than the existing `fixtures/sprint.json` test cases exercise together. It's invented (NOVA scenario, same as the rest of the project), NOT the real 28.08 demo transcript used for this project's manual validation — that real transcript stays in scratchpad per the project's own rule against committing real client data.
 
 - [ ] **Step 1: Write the invented sample transcript fixture**
 
@@ -1169,4 +1169,4 @@ git commit -m "Task 7: run_polosa_replay.py — pywebview wiring, real Groq, REA
 - **Spec coverage:** Task model extension (Task 1), `facts.py` (Task 2), `meeting.py` incl. `said_n` progressive reveal (Task 3), `hints.py` real Groq contract (Task 4), `replay_driver.py` (Task 5, using invented data per the project's own real-data rule — a deliberate, disclosed correction from the spec's original wording), `polosa.html` reduced view + apple-design motion (Task 6), pywebview wiring (Task 7). `hit_words` and live-mic/real-Jira explicitly out of scope, matching the spec's own "Не входит" section.
 - **No placeholders:** every step has runnable code.
 - **Type/name consistency checked:** `Task.priority/labels/created/url`, `Line(t, who, text, task)`, `Meeting(phase, lines, done, current, fresh, said, said_n, ask, elapsed_s, remaining_count)`, `build_facts(task, now)`, `get_hints(lines, task, api_key, timeout)`, `replay(transcript, agenda)` — spelled identically everywhere used across tasks.
-- **Real-data check:** confirmed no task commits real Tranio titles/names/keys — Task 5's fixture and Task 4/7's example data are all NOVA-scenario inventions.
+- **Real-data check:** confirmed no task commits real client titles/names/keys — Task 5's fixture and Task 4/7's example data are all NOVA-scenario inventions.
