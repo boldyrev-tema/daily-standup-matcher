@@ -13,6 +13,7 @@ from hints import get_hints
 from live_audio import LiveAudioSession
 from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
+from recap import build_recap, latest_recap, save_recap
 from sprint_snapshot import Task, load_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
@@ -221,6 +222,20 @@ def _run_live(window, loaded_event):
         session = LiveAudioSession(speechmatics_key, on_turn)
         session.start()
         window.events.closing += session.stop
+
+        def _save_recap_on_close():
+            # Non-daemon: closing the window must not wait for this, but the
+            # process itself needs to stay alive until it's done writing —
+            # see docs/superpowers/specs/2026-09-02-daily-recap-design.md
+            # ("Не блокировать закрытие окна").
+            def _do_save():
+                records = build_recap(meeting, agenda, api_key)
+                if records:
+                    save_recap(records)
+
+            threading.Thread(target=_do_save, daemon=False).start()
+
+        window.events.closing += _save_recap_on_close
         print("Живой микрофон запущен — говорите; закройте окно, чтобы остановить.")
     except Exception as e:
         print(f"live run failed: {e}", file=sys.stderr)
@@ -247,10 +262,46 @@ if __name__ == "__main__":
         window.minimize()
 
     def close_window():
-        window.destroy()
+        # destroy() called synchronously from inside this JS-bridge callback
+        # left the window stuck showing a perpetual loading state instead of
+        # closing (2 сен, live click test) — the callback's own thread is
+        # what pywebview uses to deliver the JS promise result, and tearing
+        # the window down mid-delivery never lets that resolve. Detaching
+        # the destroy onto its own thread lets this call return normally.
+        threading.Thread(target=window.destroy, daemon=True).start()
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
-    target = _run_live if "--live" in sys.argv else _run_replay
+
+    is_live = "--live" in sys.argv
+    if is_live:
+        prior_recap = latest_recap()
+        if prior_recap is not None:
+            recap_window = webview.create_window(
+                "Прошлый дейлик",
+                "recap.html",
+                width=380,
+                height=500,
+                x=1160,
+                y=40,
+                frameless=True,
+                on_top=True,
+                transparent=True,
+            )
+
+            def close_recap_window():
+                threading.Thread(target=recap_window.destroy, daemon=True).start()
+
+            recap_window.expose(close_recap_window)
+            recap_loaded_event = threading.Event()
+            recap_window.events.loaded += recap_loaded_event.set
+
+            def _show_recap():
+                recap_loaded_event.wait(timeout=10)
+                recap_window.evaluate_js(f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})")
+
+            threading.Thread(target=_show_recap, daemon=True).start()
+
+    target = _run_live if is_live else _run_replay
     webview.start(target, (window, loaded_event))
