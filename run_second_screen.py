@@ -10,7 +10,7 @@ from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from facts import agenda_row, build_facts
 from hints import get_hints
-from live_audio import LiveAudioSession
+from live_audio import LiveAudioSession, build_additional_vocab
 from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
 from recap import build_recap, latest_recap, save_recap
@@ -219,7 +219,7 @@ def _run_live(window, loaded_event):
                     speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"]
                 )
 
-        session = LiveAudioSession(speechmatics_key, on_turn)
+        session = LiveAudioSession(speechmatics_key, on_turn, additional_vocab=build_additional_vocab(agenda))
         session.start()
         # events.closed, not events.closing: closing only fires via Cocoa's
         # windowShouldClose_ delegate method, which performClose_ (the

@@ -189,6 +189,11 @@ mic worked fine. Real hardware self-noise is never bit-exact zero, so a
 near-zero probe reliably tells "not delivering audio" apart from "device is
 just quiet."
 
+Speechmatics gets a custom vocabulary (`additional_vocab`) built from the
+current agenda's task titles (`live_audio.build_additional_vocab()`, words
+>3 letters, stopwords dropped) — nudges recognition toward the actual
+product names/jargon this sprint uses instead of a generic model's guess.
+
 System audio (the other side of the call, labeled "Собеседник") needs the
 `SystemAudioDump` binary from the `cheating-daddy` project — **not bundled
 here** (this repo is public; that binary's license isn't ours to

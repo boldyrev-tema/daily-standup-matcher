@@ -1,6 +1,9 @@
+from datetime import datetime, timezone
+
 import numpy as np
 
-from live_audio import pick_working_input_device
+from live_audio import build_additional_vocab, pick_working_input_device
+from sprint_snapshot import Task
 
 DEVICES = [
     {"name": "LEN T27p-10", "max_input_channels": 0},
@@ -60,3 +63,40 @@ def test_falls_back_to_default_when_every_device_is_silent():
 
     picked = pick_working_input_device(devices=DEVICES, default_index=1, record=record)
     assert picked == 1
+
+
+def _task(title: str) -> Task:
+    return Task(
+        key="NOVA-1", title=title, assignee="Кто-то",
+        status="В работе", updated_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+    )
+
+
+def test_build_additional_vocab_extracts_words_from_titles():
+    agenda = [_task("Сделки — объединяем карточки клиентов")]
+    vocab = build_additional_vocab(agenda)
+    assert {"content": "Сделки"} in vocab
+    assert {"content": "объединяем"} in vocab
+    assert {"content": "карточки"} in vocab
+    assert {"content": "клиентов"} in vocab
+
+
+def test_build_additional_vocab_drops_short_and_stop_words():
+    agenda = [_task("Выгрузка в старую систему для отчётов")]
+    vocab = build_additional_vocab(agenda)
+    contents = {v["content"].lower() for v in vocab}
+    assert "в" not in contents
+    assert "для" not in contents  # stopword
+    # "старую" (6 letters) kept, but nothing 3 letters or shorter survives
+    assert all(len(c) > 3 for c in contents)
+
+
+def test_build_additional_vocab_dedupes_case_insensitively_keeping_first_seen():
+    agenda = [_task("Сделки готовы"), _task("сделки закрыты")]
+    vocab = build_additional_vocab(agenda)
+    matches = [v for v in vocab if v["content"].lower() == "сделки"]
+    assert matches == [{"content": "Сделки"}]
+
+
+def test_build_additional_vocab_empty_agenda():
+    assert build_additional_vocab([]) == []

@@ -2,6 +2,7 @@ import asyncio
 import audioop
 import os
 import queue
+import re
 import subprocess
 import threading
 from typing import Callable
@@ -17,6 +18,31 @@ from speechmatics.rt import (
     TranscriptResult,
     TranscriptionConfig,
 )
+
+from sprint_snapshot import Task
+from stopwords import STOPWORDS
+
+_VOCAB_WORD_RE = re.compile(r"[а-яА-ЯёЁa-zA-Z]+")
+
+
+def build_additional_vocab(agenda: list[Task]) -> list[dict]:
+    """Speechmatics' additional_vocab: distinctive words from the current
+    sprint's task titles (product names, jargon) so it recognizes them more
+    reliably than a generic model would — see "Известные ограничения" in
+    docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md.
+    Case-insensitive dedup, keeping the first-seen casing; words of length
+    <=3 or in STOPWORDS are dropped as too generic to help.
+    """
+    seen_lower: set[str] = set()
+    vocab: list[dict] = []
+    for task in agenda:
+        for word in _VOCAB_WORD_RE.findall(task.title):
+            lower = word.lower()
+            if len(lower) <= 3 or lower in STOPWORDS or lower in seen_lower:
+                continue
+            seen_lower.add(lower)
+            vocab.append({"content": word})
+    return vocab
 
 # Adapted from the proven PoC at ~/Desktop/Rinat Work/live_copilot_poc/
 # live_copilot_poc.py (mic + system-audio -> Speechmatics streaming, tested
@@ -93,9 +119,15 @@ class LiveAudioSession:
     asyncio loop in a background thread; start() returns immediately.
     """
 
-    def __init__(self, api_key: str, on_turn: Callable[[str, str], None]):
+    def __init__(
+        self,
+        api_key: str,
+        on_turn: Callable[[str, str], None],
+        additional_vocab: list[dict] | None = None,
+    ):
         self.api_key = api_key
         self.on_turn = on_turn
+        self.additional_vocab = additional_vocab
         self.running = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ready = threading.Event()
@@ -142,6 +174,7 @@ class LiveAudioSession:
             max_delay=0.8,
             enable_partials=True,
             conversation_config=ConversationConfig(end_of_utterance_silence_trigger=0.5),
+            additional_vocab=self.additional_vocab,
         )
         while self.running:
             buffer_parts: list[str] = []
