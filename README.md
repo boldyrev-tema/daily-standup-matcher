@@ -10,17 +10,23 @@ for what's a faithful reconstruction vs. an explicitly-flagged assumption.
 
 ## Two ways to run it
 
-- **Script** — double-click one of the `.command` files in the repo root
-  (e.g. `Второй экран (терминал).command`), or run
-  `venv/bin/python3 run_second_screen.py` directly. Opens a visible
-  Terminal window, good for seeing errors live.
-- **App** — a packaged `.app` (see "Running as an app" below), no terminal
-  window at all. It does **not** show up in the Dock or Cmd+Tab — instead
-  it lives as a small icon in the menu bar at the top of the screen, which
-  toggles the window and lets you switch layout (unified build) or quit.
+Pick whichever fits what you're doing right now — both run the exact same
+matching/hints code underneath, the app is just a different wrapper around
+the same scripts, not a separate implementation.
 
-Both run the exact same matching/hints code underneath — the app is just a
-different wrapper around the same scripts, not a separate implementation.
+- **Script — for trying it out or debugging.** Double-click one of the
+  `.command` files in the repo root (e.g. `Второй экран (терминал).command`),
+  or run `venv/bin/python3 run_second_screen.py` directly. Nothing to
+  install beyond "Setup" below. Opens a visible Terminal window, so any
+  error prints right there — the way to go the first time, or whenever
+  something looks wrong and you want to see what it's actually doing.
+- **App — for everyday use during a real daily.** A packaged `.app` (see
+  "Running as an app" below), no terminal window, nothing to look at or
+  accidentally close. It does **not** show up in the Dock or Cmd+Tab —
+  instead it lives as a small icon in the menu bar at the top of the
+  screen, which toggles the window and lets you switch layout (unified
+  build) or quit. Build it once with `py2app` (see below), then just open
+  it like any other app from then on.
 
 ## Setup
 
