@@ -7,5 +7,6 @@ recaps/
 logs/
 build/
 dist/
+AppIcon.icns
 
 .claude/settings.local.json

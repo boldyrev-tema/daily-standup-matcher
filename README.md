@@ -332,8 +332,14 @@ Two independent ways to launch, both still supported:
 - **App — `dist/Дейлик.app`, build this one.** One app, no terminal, a
   menu-bar icon (no Dock icon) with a submenu to switch live between the
   three layouts without restarting the meeting — the agenda, matcher
-  state, and (in `--live` mode) the Speechmatics session keep running
-  unchanged; only the window's content and size change.
+  state, and the Speechmatics session keep running unchanged; only the
+  window's content and size change. **Opens straight into `--live`** (a
+  double-click can't pass command-line flags, and by the time you're
+  reaching for the app instead of a script, you're using it on a real
+  daily) — `open dist/Дейлик.app --args --demo` from a terminal gets the
+  deterministic file replay instead, for trying it out without a
+  microphone. The three standalone scripts above keep the opposite
+  default (`--live` opt-in) since they're for debugging, not everyday use.
 
 `setup_column.py` / `setup_second_screen.py` / `setup_polosa_replay.py`
 still exist and build a single-layout `.app` each the same way, if you ever

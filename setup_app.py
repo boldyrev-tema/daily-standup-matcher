@@ -8,9 +8,14 @@ three HTML templates plus recap.html — the unified app can end up on any
 layout, and --live pulls in the recap window like run_second_screen.py's
 own build already does.
 
-Build: venv/bin/python3.14 setup_app.py py2app
+Build: venv/bin/python3.14 make_app_icon.py && venv/bin/python3.14 setup_app.py py2app
 """
+import os
+
 from setuptools import setup
+
+if not os.path.exists("AppIcon.icns"):
+    raise SystemExit("AppIcon.icns missing — run: venv/bin/python3.14 make_app_icon.py")
 
 APP = ["run_app.py"]
 DATA_FILES = [
@@ -22,7 +27,7 @@ DATA_FILES = [
 ]
 OPTIONS = {
     "argv_emulation": False,
-    "iconfile": None,
+    "iconfile": "AppIcon.icns",
     "plist": {
         "CFBundleName": "Дейлик",
         "CFBundleDisplayName": "Дейлик",

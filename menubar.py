@@ -93,15 +93,40 @@ _ICON_SIZE = 44
 _SUPERSAMPLE = 4
 
 
+# Same dark-glass-plus-accent language as make_app_icon.py's Dock icon —
+# --page-bg/--accent-text tokens straight from second_screen.html/etc, not
+# reinvented — so the menu-bar icon and the Dock/app icon read as the same
+# product instead of two unrelated designs. A rounded square (not a plain
+# circle) also matches the shape language of the neighboring menu-bar icons
+# (found by comparing a real screenshot directly — most of them are rounded
+# squares or app-shaped badges, not bare circles).
+_BG_TOP = (30, 28, 36)
+_BG_BOTTOM = (16, 15, 20)
+_ACCENT = (214, 200, 255)  # --accent-text: #D6C8FF
+
+
 def _make_icon_image(label: str) -> Image.Image:
-    """Small dark circle with a single letter — generated, no asset file."""
+    """Small dark rounded-square badge with a single letter — generated, no
+    asset file."""
     big = _SUPERSAMPLE * _ICON_SIZE
     img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+    for y in range(big):
+        t = y / big
+        r = int(_BG_TOP[0] + (_BG_BOTTOM[0] - _BG_TOP[0]) * t)
+        g = int(_BG_TOP[1] + (_BG_BOTTOM[1] - _BG_TOP[1]) * t)
+        b = int(_BG_TOP[2] + (_BG_BOTTOM[2] - _BG_TOP[2]) * t)
+        draw.line([(0, y), (big, y)], fill=(r, g, b, 255))
     margin = _SUPERSAMPLE * 2
-    draw.ellipse((margin, margin, big - margin, big - margin), fill=(40, 38, 46, 255))
+    mask = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (margin, margin, big - margin, big - margin), radius=int(big * 0.22), fill=255
+    )
+    bg = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    bg.paste(img, (0, 0), mask)
+    img, draw = bg, ImageDraw.Draw(bg)
     font = _load_label_font(int(big * 0.55))
-    draw.text((big / 2, big / 2), label, fill=(255, 255, 255, 255), anchor="mm", font=font)
+    draw.text((big / 2, big / 2), label, fill=_ACCENT + (255,), anchor="mm", font=font)
     return img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS)
 
 

@@ -217,7 +217,16 @@ if __name__ == "__main__":
 
     window.expose(minimize_window, close_window)
 
-    is_live = "--live" in sys.argv
+    # Live by default, not opt-in — unlike the three standalone run_*.py
+    # (still --live-opt-in, meant for trying things out/debugging from a
+    # terminal, see README's "Two ways to run it"), this is the packaged
+    # app's whole reason to exist: by the time someone reaches for
+    # dist/Дейлик.app instead of a script, the intent is already "use this
+    # on a real daily." Double-clicking an .app can't pass arguments at
+    # all, so a --live-required default would have meant demo forever for
+    # anyone not launching from a terminal. --demo is the explicit opt-out
+    # for testing/demoing without a microphone.
+    is_live = "--demo" not in sys.argv
     if is_live:
         prior_recap = latest_recap()
         if prior_recap is not None:
