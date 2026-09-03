@@ -108,6 +108,18 @@ venv/bin/python3 -m pytest -v
 - `recap.py` — builds/saves/loads the post-daily recap, see "Post-daily
   recap" below.
 - `recap.html` — the small standalone window that shows a saved recap.
+- `menubar.py` — menu-bar (macOS status bar) icon, replaces Dock-based
+  minimize now that the app is hidden from the Dock. `start_tray()` (plain
+  Показать/Скрыть + Выход, used by the three standalone `run_*.py`) and
+  `start_layout_tray()` (adds a layout-picker submenu, used by `run_app.py`
+  below) both run everything on the main thread — see the module docstring
+  for the real crash a background-thread version hit.
+- `patch_pywebview.py` — idempotent post-install patch for a real pywebview
+  6.2.1 bug (its internal HTTP server crashes on a bare `/` request). Run
+  once after `pip install -r requirements.txt`.
+- `run_app.py` + `setup_app.py` — the unified app: one process, one window,
+  live choice of layout (Полоса/Второй экран/Колонка) from the menu-bar
+  icon instead of three separate apps. See "Running as an app" below.
 
 ## Why OpenRouter, not Groq
 
@@ -234,6 +246,43 @@ window closes immediately, but the process itself stays alive a few extra
 seconds to finish the LLM calls and write the file — see
 `docs/superpowers/specs/2026-09-02-daily-recap-design.md`.
 
+## Running as an app (no terminal)
+
+Two independent ways to launch, both still supported:
+
+- **Terminal** — `venv/bin/python3 run_second_screen.py` (or `run_column.py`
+  / `run_polosa_replay.py`), same as always. `.command` files in the repo
+  root do the same thing double-clickable from Finder, with a visible
+  Terminal window for debugging.
+- **App** — `dist/Дейлик.app` (built via `setup_app.py`, see below): one
+  app, no terminal, a menu-bar icon (no Dock icon) with a submenu to switch
+  live between the three layouts without restarting the meeting — the
+  agenda, matcher state, and (in `--live` mode) the Speechmatics session
+  keep running unchanged; only the window's content and size change. Each
+  layout also still has its own single-purpose `dist/Колонка.app` /
+  `dist/Второй экран.app` / `dist/Полоса.app`, built the same way from
+  `setup_column.py` / `setup_second_screen.py` / `setup_polosa_replay.py`.
+
+Build any of them with `py2app`:
+
+```bash
+venv/bin/python3 setup_app.py py2app        # or setup_column.py / setup_second_screen.py / setup_polosa_replay.py
+```
+
+`dist/`, `build/`, and `logs/` are gitignored — nothing here is committed,
+only the `setup_*.py` scripts that produce them. Two native dependencies
+needed forcing into `packages` in every `setup_*.py` (py2app's static
+import analysis misses their non-code files otherwise): `pymorphy3_dicts_ru`
+(dictionary data, "Can't find a dictionary for language 'ru'" without it)
+and `_sounddevice_data` (the actual PortAudio `.dylib` — `sounddevice`
+itself is a flat module, not a package, so it alone doesn't pull the native
+library in). The Dock icon staying hidden needed more than the plist's
+`LSUIElement` — pywebview's own Cocoa backend forces a Regular activation
+policy the first time it creates a window, so `menubar.hide_from_dock()`
+reasserts Accessory policy on a burst of delayed callbacks instead of a
+single call, confirmed deterministic across repeated runs of the same
+build.
+
 ## Known gaps in this iteration
 
 Not yet done: real Jira snapshot (still `fixtures/sprint.json` — the live
@@ -245,4 +294,7 @@ see `docs/superpowers/specs/2026-08-29-polosa-replay-design.md` for why).
 The PRD gate (3-4 real live dailies with hand-counted recognition/latency)
 is still unmet — replays of a real transcript got close twice, but that's
 not the same as a live mic on a real call; see `docs/superpowers/specs/`
-project memory for details.
+project memory for details. `--live` inside a `py2app` bundle has only been
+smoke-tested (session stays connected ~20s, no reconnect/failure, correct
+device-fallback logging) — not run through an actual full daily with a real
+voice yet.
