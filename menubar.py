@@ -93,40 +93,53 @@ _ICON_SIZE = 44
 _SUPERSAMPLE = 4
 
 
-# Same dark-glass-plus-accent language as make_app_icon.py's Dock icon —
-# --page-bg/--accent-text tokens straight from second_screen.html/etc, not
-# reinvented — so the menu-bar icon and the Dock/app icon read as the same
-# product instead of two unrelated designs. A rounded square (not a plain
-# circle) also matches the shape language of the neighboring menu-bar icons
-# (found by comparing a real screenshot directly — most of them are rounded
-# squares or app-shaped badges, not bare circles).
-_BG_TOP = (30, 28, 36)
-_BG_BOTTOM = (16, 15, 20)
-_ACCENT = (214, 200, 255)  # --accent-text: #D6C8FF
+# Glyph: an audio-waveform/equalizer bar shape instead of a letter — the
+# product's whole job is listening to speech, and a waveform reads the same
+# regardless of language, unlike a Cyrillic "Д" (per the user's own note).
+# Shared with make_app_icon.py's Dock icon, so both use the same mark.
+_BAR_HEIGHTS = (0.35, 0.62, 1.0, 0.62, 0.35)
+
+
+def draw_waveform(draw: ImageDraw.ImageDraw, cx: float, cy: float, size: float, color) -> None:
+    """Draws the waveform glyph centered at (cx, cy), sized to fit within a
+    `size`-wide/tall box, in `color` (an (r,g,b,a) tuple or (r,g,b))."""
+    if len(color) == 3:
+        color = (*color, 255)
+    n = len(_BAR_HEIGHTS)
+    span = size * 0.72
+    gap = span / n
+    bar_w = gap * 0.5
+    max_h = size * 0.62
+    start_x = cx - span / 2 + gap / 2
+
+    for i, h in enumerate(_BAR_HEIGHTS):
+        bar_h = max(max_h * h, bar_w)  # never shorter than it is wide, else caps overlap oddly
+        x = start_x + i * gap
+        draw.rounded_rectangle(
+            (x - bar_w / 2, cy - bar_h / 2, x + bar_w / 2, cy + bar_h / 2),
+            radius=bar_w / 2,
+            fill=color,
+        )
 
 
 def _make_icon_image(label: str) -> Image.Image:
-    """Small dark rounded-square badge with a single letter — generated, no
-    asset file."""
+    """Small waveform silhouette — generated, no asset file. A plain
+    silhouette, not a colored badge — matching how most of the OTHER icons
+    in the real menu bar actually look (found by comparing a real
+    screenshot directly, at the user's request): AirPods, battery, wifi etc.
+    are all monochrome "template images" that macOS itself tints for the
+    current light/dark menu bar, not custom-colored badges. Any RGB drawn
+    here is discarded by AppKit once NSImage.setTemplate_(True) is set (see
+    start_tray/start_layout_tray) — only the alpha channel/shape matters, so
+    solid black is the right (and only meaningful) fill color.
+
+    `label` is unused now (kept so callers don't need updating) — every
+    layout shares one glyph; the tray menu's checkmark is what signals
+    which is active, same as before.
+    """
     big = _SUPERSAMPLE * _ICON_SIZE
     img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    for y in range(big):
-        t = y / big
-        r = int(_BG_TOP[0] + (_BG_BOTTOM[0] - _BG_TOP[0]) * t)
-        g = int(_BG_TOP[1] + (_BG_BOTTOM[1] - _BG_TOP[1]) * t)
-        b = int(_BG_TOP[2] + (_BG_BOTTOM[2] - _BG_TOP[2]) * t)
-        draw.line([(0, y), (big, y)], fill=(r, g, b, 255))
-    margin = _SUPERSAMPLE * 2
-    mask = Image.new("L", (big, big), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (margin, margin, big - margin, big - margin), radius=int(big * 0.22), fill=255
-    )
-    bg = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    bg.paste(img, (0, 0), mask)
-    img, draw = bg, ImageDraw.Draw(bg)
-    font = _load_label_font(int(big * 0.55))
-    draw.text((big / 2, big / 2), label, fill=_ACCENT + (255,), anchor="mm", font=font)
+    draw_waveform(ImageDraw.Draw(img), big / 2, big / 2, big, (0, 0, 0, 255))
     return img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS)
 
 
@@ -159,6 +172,22 @@ def hide_from_dock() -> None:
             AppKit.NSApplication.sharedApplication().setActivationPolicy_,
             AppKit.NSApplicationActivationPolicyAccessory,
         )
+
+
+def _mark_as_template(icon) -> None:
+    """Tell AppKit this is a template image — macOS then tints it (white on
+    a dark menu bar, black on a light one, adapts to Control Center too)
+    instead of showing our drawn colors as-is, matching how AirPods/
+    battery/wifi and most other menu-bar icons actually render (per the
+    user's own screenshot comparison). pystray has no public API for this
+    (confirmed by reading pystray/_darwin.py — no `template` option
+    anywhere), but exposes the underlying NSImage as `icon._icon_image`
+    once the icon has been made visible (assigned lazily in its own
+    `_assert_image()`), so it's set directly. `icon.visible = True` must
+    run first, or `_icon_image` is still None.
+    """
+    if HAS_APPKIT and getattr(icon, "_icon_image", None) is not None:
+        icon._icon_image.setTemplate_(True)
 
 
 def start_tray(window, label: str):
@@ -200,6 +229,7 @@ def start_tray(window, label: str):
     icon = pystray.Icon(f"daily-standup-{label}", _make_icon_image(label), menu=menu)
     icon.run_detached(setup=lambda icon: None)
     icon.visible = True
+    _mark_as_template(icon)
     return icon, hide
 
 
@@ -261,4 +291,5 @@ def start_layout_tray(window, layouts, order, state_ref, on_select):
     icon = pystray.Icon("daily-standup-app", _make_icon_image("Д"), menu=menu)
     icon.run_detached(setup=lambda icon: None)
     icon.visible = True
+    _mark_as_template(icon)
     return icon, hide

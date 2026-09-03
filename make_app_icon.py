@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from menubar import _load_label_font
+from menubar import draw_waveform
 
 MASTER = 1024
 SUPERSAMPLE = 2  # 2048px working canvas — plenty for a crisp 1024 result
@@ -57,9 +57,11 @@ def build_master() -> Image.Image:
     img = bg
     draw = ImageDraw.Draw(img)
 
-    # Centered "Д" glyph, same font-fallback chain as the tray icon.
-    font = _load_label_font(int(BIG * 0.5))
-    draw.text((BIG / 2, BIG / 2 - BIG * 0.02), "Д", fill=ACCENT + (255,), anchor="mm", font=font)
+    # Same waveform glyph as the tray icon (menubar.draw_waveform) — one
+    # abstract, language-independent mark instead of a Cyrillic letter (per
+    # the user's own note), shared so the Dock icon and the menu-bar icon
+    # read as the same product.
+    draw_waveform(draw, BIG / 2, BIG / 2, BIG * 0.85, ACCENT)
 
     # Live-dot accent, bottom-right — the same green the product itself uses
     # for "currently listening", a real signature of this app, not a
