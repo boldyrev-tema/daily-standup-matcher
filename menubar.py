@@ -1,7 +1,9 @@
 """Menu-bar (macOS status bar) icon that shows/hides a frameless pywebview
 window, replacing Dock-based minimize now that the app is hidden from the
-Dock (see hide_from_dock()). Shared by all three run_*.py front-ends
-(Полоса/Второй экран/Колонка) — same idea, different single-letter label.
+Dock (see hide_from_dock()). Shared by all four run_*.py front-ends
+(Полоса/Второй экран/Колонка/Дейлик) — same icon (a waveform glyph, see
+_make_icon_image), `label` now only names the pystray Icon instance
+internally, not what's drawn.
 
 Everything here runs on the MAIN thread, called from __main__ before
 webview.start(). An earlier version ran pystray's Icon.run() in a background
@@ -22,7 +24,7 @@ the main thread.
 import threading
 
 import pystray
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 try:
     import AppKit
@@ -55,29 +57,6 @@ def defer(delay: float, fn) -> None:
         AppHelper.callLater(delay, fn)
     else:
         threading.Timer(delay, fn).start()
-
-
-# PIL's built-in load_default() bitmap font has no Cyrillic glyphs at all —
-# it silently renders a .notdef box instead (found by actually looking at
-# the rendered PNG, not by counting lit pixels like the earlier fix that
-# introduced load_default(size=20): that fix made the box BIGGER and more
-# visible, and was mistaken for a fixed letter — it was still the wrong
-# glyph, just a more visible wrong glyph). These are real macOS system
-# fonts, always present, and actually cover Cyrillic — first one found wins.
-_CYRILLIC_FONT_CANDIDATES = (
-    "/System/Library/Fonts/SFNS.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-)
-
-
-def _load_label_font(size: int) -> ImageFont.ImageFont:
-    for path in _CYRILLIC_FONT_CANDIDATES:
-        try:
-            return ImageFont.truetype(path, size)
-        except OSError:
-            continue
-    return ImageFont.load_default(size=size)
 
 
 # Menu-bar icon target size — macOS status items render at ~22pt, so 44px

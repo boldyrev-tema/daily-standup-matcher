@@ -142,6 +142,9 @@ venv/bin/python3 -m pytest -v
 - `run_app.py` + `setup_app.py` — the unified app: one process, one window,
   live choice of layout (Полоса/Второй экран/Колонка) from the menu-bar
   icon instead of three separate apps. See "Running as an app" below.
+- `make_app_icon.py` — generates `AppIcon.icns` for the packaged app from
+  this project's own design tokens (not a stock/placeholder icon). See
+  "Running as an app" below.
 
 ## Why OpenRouter, not Groq
 
@@ -349,11 +352,13 @@ build all four; pick `setup_app.py` unless you know you want one of the
 others.
 
 ```bash
+venv/bin/python3 make_app_icon.py   # writes AppIcon.icns — setup_app.py refuses to run without it
 venv/bin/python3 setup_app.py py2app
 ```
 
-`dist/`, `build/`, and `logs/` are gitignored — nothing here is committed,
-only the `setup_*.py` scripts that produce them. Two native dependencies
+`dist/`, `build/`, `logs/`, and `AppIcon.icns` are gitignored — nothing
+here is committed, only the scripts that produce them
+(`make_app_icon.py`/`setup_*.py`). Two native dependencies
 needed forcing into `packages` in every `setup_*.py` (py2app's static
 import analysis misses their non-code files otherwise): `pymorphy3_dicts_ru`
 (dictionary data, "Can't find a dictionary for language 'ru'" without it)
@@ -365,6 +370,16 @@ policy the first time it creates a window, so `menubar.hide_from_dock()`
 reasserts Accessory policy on a burst of delayed callbacks instead of a
 single call, confirmed deterministic across repeated runs of the same
 build.
+
+Both icons — the Dock/Finder one (`make_app_icon.py`) and the menu-bar one
+(`menubar._make_icon_image`) — draw the same waveform glyph from the
+project's own design tokens (`second_screen.html`'s `--accent-text`/
+`--live` CSS custom properties), not a letter or a stock icon. The menu-bar
+one is a proper macOS "template image" (`NSImage.setTemplate_(True)`,
+via `menubar._mark_as_template`) — a plain monochrome silhouette that macOS
+itself tints for the current light/dark menu bar, the same convention
+AirPods/battery/wifi and most other menu-bar icons use, rather than a
+custom-colored badge.
 
 ## Known gaps in this iteration
 
