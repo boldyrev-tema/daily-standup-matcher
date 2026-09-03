@@ -31,17 +31,36 @@ except ImportError:
     HAS_APPKIT = False
 
 
+# PIL's built-in load_default() bitmap font has no Cyrillic glyphs at all —
+# it silently renders a .notdef box instead (found by actually looking at
+# the rendered PNG, not by counting lit pixels like the earlier fix that
+# introduced load_default(size=20): that fix made the box BIGGER and more
+# visible, and was mistaken for a fixed letter — it was still the wrong
+# glyph, just a more visible wrong glyph). These are real macOS system
+# fonts, always present, and actually cover Cyrillic — first one found wins.
+_CYRILLIC_FONT_CANDIDATES = (
+    "/System/Library/Fonts/SFNS.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+)
+
+
+def _load_label_font(size: int) -> ImageFont.ImageFont:
+    for path in _CYRILLIC_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size=size)
+
+
 def _make_icon_image(label: str) -> Image.Image:
-    """Small dark circle with a single letter — generated, no asset file.
-    PIL's zero-arg default font renders at a fixed, tiny size (a Cyrillic
-    glyph came out as ~4 lit pixels total in a 32x32 canvas — invisible at
-    actual menu-bar scale, confirmed by counting rendered pixels, not
-    guessed) — load_default(size=...) exists specifically to fix this."""
+    """Small dark circle with a single letter — generated, no asset file."""
     size = 32
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     draw.ellipse((1, 1, size - 2, size - 2), fill=(40, 38, 46, 255))
-    font = ImageFont.load_default(size=20)
+    font = _load_label_font(20)
     draw.text((size / 2, size / 2), label, fill=(255, 255, 255, 255), anchor="mm", font=font)
     return img
 
