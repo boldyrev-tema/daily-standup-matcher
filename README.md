@@ -329,19 +329,21 @@ Two independent ways to launch, both still supported:
   / `run_polosa_replay.py`), same as always. `.command` files in the repo
   root do the same thing double-clickable from Finder, with a visible
   Terminal window for debugging.
-- **App** — `dist/Дейлик.app` (built via `setup_app.py`, see below): one
-  app, no terminal, a menu-bar icon (no Dock icon) with a submenu to switch
-  live between the three layouts without restarting the meeting — the
-  agenda, matcher state, and (in `--live` mode) the Speechmatics session
-  keep running unchanged; only the window's content and size change. Each
-  layout also still has its own single-purpose `dist/Колонка.app` /
-  `dist/Второй экран.app` / `dist/Полоса.app`, built the same way from
-  `setup_column.py` / `setup_second_screen.py` / `setup_polosa_replay.py`.
+- **App — `dist/Дейлик.app`, build this one.** One app, no terminal, a
+  menu-bar icon (no Dock icon) with a submenu to switch live between the
+  three layouts without restarting the meeting — the agenda, matcher
+  state, and (in `--live` mode) the Speechmatics session keep running
+  unchanged; only the window's content and size change.
 
-Build any of them with `py2app`:
+`setup_column.py` / `setup_second_screen.py` / `setup_polosa_replay.py`
+still exist and build a single-layout `.app` each the same way, if you ever
+specifically want just one layout with no switcher — but `Дейлик.app`
+covers everything they do plus live switching, so there's no reason to
+build all four; pick `setup_app.py` unless you know you want one of the
+others.
 
 ```bash
-venv/bin/python3 setup_app.py py2app        # or setup_column.py / setup_second_screen.py / setup_polosa_replay.py
+venv/bin/python3 setup_app.py py2app
 ```
 
 `dist/`, `build/`, and `logs/` are gitignored — nothing here is committed,
