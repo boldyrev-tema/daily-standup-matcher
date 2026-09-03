@@ -12,7 +12,7 @@ from hints import get_hints
 from match_core import ambiguous_candidates, match
 from meeting import Line, Meeting
 from run_second_screen import LLM_KEY_PATH, TEAM, _WORD_RE, _apply_pending, _primary_match, _state_json
-from sprint_snapshot import load_sprint
+from sprint_snapshot import load_current_sprint
 
 
 def _run_replay(window, loaded_event):
@@ -23,8 +23,8 @@ def _run_replay(window, loaded_event):
         # hit this twice on his machine).
         loaded_event.wait(timeout=10)
 
-        tasks = load_sprint("fixtures/sprint.json")
-        agenda = build_agenda(tasks, TEAM)
+        tasks, team = load_current_sprint("fixtures/sprint.json", TEAM)
+        agenda = build_agenda(tasks, team)
         alarm_task = pick_alarm(agenda)
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)

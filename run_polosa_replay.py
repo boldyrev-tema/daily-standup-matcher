@@ -14,7 +14,7 @@ from hints import get_hints
 from match_core import ambiguous_candidates, match
 from meeting import Line, Meeting
 from run_second_screen import _apply_pending
-from sprint_snapshot import load_sprint
+from sprint_snapshot import load_current_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
 LLM_KEY_PATH = "~/.credentials/openrouter_api_key.env"
@@ -63,8 +63,8 @@ def _run_replay(window, loaded_event):
         # hit this twice on his machine).
         loaded_event.wait(timeout=10)
 
-        tasks = load_sprint("fixtures/sprint.json")
-        agenda = build_agenda(tasks, TEAM)
+        tasks, team = load_current_sprint("fixtures/sprint.json", TEAM)
+        agenda = build_agenda(tasks, team)
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")

@@ -15,7 +15,7 @@ from live_audio import LiveAudioSession, build_additional_vocab
 from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
 from recap import build_recap, latest_recap, save_recap
-from sprint_snapshot import Task, load_sprint
+from sprint_snapshot import Task, load_current_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
 LLM_KEY_PATH = "~/.credentials/openrouter_api_key.env"
@@ -164,8 +164,8 @@ def _run_replay(window, loaded_event):
         # hit this twice on his machine).
         loaded_event.wait(timeout=10)
 
-        tasks = load_sprint("fixtures/sprint.json")
-        agenda = build_agenda(tasks, TEAM)
+        tasks, team = load_current_sprint("fixtures/sprint.json", TEAM)
+        agenda = build_agenda(tasks, team)
         alarm_task = pick_alarm(agenda)
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)
@@ -208,8 +208,8 @@ def _run_live(window, loaded_event):
     try:
         loaded_event.wait(timeout=10)
 
-        tasks = load_sprint("fixtures/sprint.json")
-        agenda = build_agenda(tasks, TEAM)
+        tasks, team = load_current_sprint("fixtures/sprint.json", TEAM)
+        agenda = build_agenda(tasks, team)
         alarm_task = pick_alarm(agenda)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
         speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")

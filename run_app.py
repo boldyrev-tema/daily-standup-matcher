@@ -25,7 +25,7 @@ from recap import build_recap, latest_recap, save_recap
 from run_polosa_replay import _state_json as _polosa_state_json
 from run_second_screen import LLM_KEY_PATH, SPEECHMATICS_KEY_PATH, TEAM, _WORD_RE, _process_turn
 from run_second_screen import _state_json as _rich_state_json
-from sprint_snapshot import load_sprint
+from sprint_snapshot import load_current_sprint
 
 LAYOUTS = {
     "second_screen": {"label": "Второй экран", "html": "second_screen.html", "width": 1100, "height": 760},
@@ -54,8 +54,8 @@ def _run_replay(window, loaded_event, state_ref, session_ref):
         # run_*.py — see run_second_screen.py's _run_replay.
         loaded_event.wait(timeout=10)
 
-        tasks = load_sprint("fixtures/sprint.json")
-        agenda = build_agenda(tasks, TEAM)
+        tasks, team = load_current_sprint("fixtures/sprint.json", TEAM)
+        agenda = build_agenda(tasks, team)
         alarm_task = pick_alarm(agenda)
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)
@@ -89,8 +89,8 @@ def _run_live(window, loaded_event, state_ref, session_ref):
     try:
         loaded_event.wait(timeout=10)
 
-        tasks = load_sprint("fixtures/sprint.json")
-        agenda = build_agenda(tasks, TEAM)
+        tasks, team = load_current_sprint("fixtures/sprint.json", TEAM)
+        agenda = build_agenda(tasks, team)
         alarm_task = pick_alarm(agenda)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
         speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")
