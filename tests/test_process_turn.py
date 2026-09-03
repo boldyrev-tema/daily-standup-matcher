@@ -80,3 +80,25 @@ def test_process_turn_backfills_pending_line_via_next_turn(monkeypatch):
     assert pending is None
     assert meeting.lines[0].task == "B-1"
     assert meeting.lines[1].task == "B-1"
+
+
+def test_process_turn_uses_custom_push_instead_of_default(monkeypatch):
+    # run_app.py needs to redirect renders to whichever layout is currently
+    # on screen instead of always evaluate_js-ing the rich second-screen
+    # state — locks down that a custom push() fully replaces the default,
+    # the window's evaluate_js is never called.
+    monkeypatch.setattr(
+        run_second_screen, "get_hints", lambda lines, task, api_key: (["сказали"], "спроси")
+    )
+    agenda = [_task("A-1", "Отчёты — убираем дубли платежей от партнёров")]
+    window = _FakeWindow()
+    meeting = Meeting(phase="live", remaining_count=1)
+    push_calls = []
+
+    _process_turn(
+        "Дарья", "убираем дубли платежей от партнёров", 1.0, agenda, meeting, None, "key", window, None,
+        push=lambda: push_calls.append(1),
+    )
+
+    assert window.calls == 0
+    assert len(push_calls) >= 2

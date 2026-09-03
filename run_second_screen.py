@@ -107,13 +107,23 @@ def _state_json(meeting: Meeting, agenda, alarm_task) -> str:
     })
 
 
-def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending):
+def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending, push=None):
     """One utterance through the full pipeline: match -> pending-carryover
     resolution -> Meeting/Line bookkeeping -> render -> hints. Shared by the
     file replay (_run_replay) and the live-microphone path (_run_live) so
     the two can never drift into different matching behavior. Returns the
     (possibly updated) pending-ambiguity state for the next call.
+
+    `push` defaults to pushing the rich second-screen/column state to
+    `window`, matching every caller before run_app.py existed. run_app.py
+    passes its own push that dispatches to whichever layout is currently on
+    screen (see run_app.py's _push_state) — the one caller allowed to
+    override this, since it's the only one juggling more than one layout on
+    the same window.
     """
+    if push is None:
+        push = lambda: window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+
     results = match(text, agenda)
     primary = _primary_match(results)
     primary, pending = _apply_pending(pending, primary, text, agenda, meeting)
@@ -131,17 +141,17 @@ def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window
         if len(candidates) >= 2:
             pending = (line, candidates)
 
-    window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+    push()
 
     if primary:
         task = next(x for x in agenda if x.key == primary.task_key)
         said, ask = get_hints(meeting.lines, task, api_key)
         meeting.set_hints(said, ask)
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        push()
 
         while meeting.reveal_next_said():
             time.sleep(1.2)
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+            push()
 
     return pending
 
