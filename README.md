@@ -250,29 +250,46 @@ Real feedback from a live call: the matcher only recognizes tasks against
 a pre-loaded agenda, and until now that agenda was a hand-edited local
 file — someone had to build a fresh `fixtures/sprint.json` before every
 single call, or the matcher had nothing real to recognize speech against.
+This section is what actually removes that step: once it's set up, every
+launch pulls the current sprint straight from Jira on its own — no more
+preparing a file by hand before each call.
 
-Add `~/.credentials/jira_credentials.env`:
+**1. Get a Jira API token** (one-time, not per call): go to
+https://id.atlassian.com/manage-profile/security/api-tokens while logged
+into the Jira account, create a token, copy it — you won't be able to see
+it again after leaving the page.
+
+**2. Create `~/.credentials/jira_credentials.env`:**
 
 ```
 JIRA_BASE_URL=https://your-site.atlassian.net
 JIRA_EMAIL=you@example.com
-JIRA_API_TOKEN=...
+JIRA_API_TOKEN=<the token from step 1>
 JIRA_JQL=project = X AND sprint in openSprints() ORDER BY updated DESC
 JIRA_TEAM=Имя Первого, Имя Второго
 ```
 
-(`JIRA_PROJECT_KEY=X` works instead of `JIRA_JQL` — a default JQL gets built
-from it.) With this file present, every `run_*.py` fetches the live sprint
-at launch instead of reading the fixture — same `Task` shape either way, no
-other code changes needed. Read-only, same as everywhere else in this
-project — only a search call is ever made, nothing here can write back to
-Jira.
+`JIRA_BASE_URL` is the Jira site address (shows in the browser URL bar
+while in Jira). `JIRA_JQL` picks which issues count as "this sprint" —
+`JIRA_PROJECT_KEY=X` works instead of writing JQL by hand, a default query
+gets built from it. `JIRA_TEAM` is the exact display names (as they appear
+in Jira) of everyone whose tasks should show up on the agenda — without it
+set, the live fetch is treated as failed (see below), since real Jira
+names would never match anything otherwise.
+
+**3. That's it — nothing else to run.** With this file present, every
+`run_*.py` fetches the live sprint at launch instead of reading the local
+fixture and feeds it into the exact same recognition logic described
+above (lemma/number matching against task titles) — the matcher doesn't
+change at all, it just gets real tasks to compare speech against instead
+of invented ones. Read-only, same as everywhere else in this project —
+only a search call is ever made, nothing here can write back to Jira.
 
 No credentials file, or the fetch fails for any reason (bad JQL, expired
-token, network) → falls back to `fixtures/sprint.json` + the module's
-hardcoded `TEAM` constant, same as before, with a stderr note in the failure
-case. Nobody without Jira set up (including this repo's own tests/demo) is
-affected.
+token, network, `JIRA_TEAM` missing) → falls back to `fixtures/sprint.json`
++ the module's hardcoded placeholder team, same as before, with a stderr
+note in the failure case. Nobody without Jira set up (including this
+repo's own tests/demo) is affected.
 
 **Unverified against a real Jira instance** — no credentials were available
 to test with, so this is built and tested against mocked responses only
