@@ -13,7 +13,14 @@ for what's a faithful reconstruction vs. an explicitly-flagged assumption.
 ```bash
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
+venv/bin/python3 patch_pywebview.py
 ```
+
+The third step patches a real bug in the installed pywebview package itself
+(its internal HTTP server crashes — `TypeError: asset() missing 1 required
+positional argument: 'file'` — whenever anything requests the server's bare
+root URL instead of a specific filename; see `patch_pywebview.py` for the
+full story). Safe to re-run after any `pip install --upgrade`.
 
 ## Run tests
 

@@ -1,0 +1,119 @@
+"""Menu-bar (macOS status bar) icon that shows/hides a frameless pywebview
+window, replacing Dock-based minimize now that the app is hidden from the
+Dock (see hide_from_dock()). Shared by all three run_*.py front-ends
+(Полоса/Второй экран/Колонка) — same idea, different single-letter label.
+
+Everything here runs on the MAIN thread, called from __main__ before
+webview.start(). An earlier version ran pystray's Icon.run() in a background
+thread (a pattern seen working in a pywebview GitHub issue thread) — that
+crashed hard on this machine: pystray's macOS backend calls its own
+NSApplication.run() inside Icon.run(), which collides with pywebview's own
+NSApplication.run() on the main thread (confirmed via a real crash report:
+EXC_BREAKPOINT/SIGTRAP inside -[NSApplication run] on the pystray thread).
+pystray's own run_detached() is the documented fix for embedding into
+another library's already-running loop — no thread of ours needed at all;
+the loop that ends up servicing the status item's clicks is whichever
+NSApplication.run() runs afterward, i.e. pywebview's, entered via
+webview.start(). Its default `setup` callback also touches AppKit
+(`visible = True`) from ANOTHER background thread it starts internally, so
+that default is suppressed here too — visibility is set directly, still on
+the main thread.
+"""
+import pystray
+from PIL import Image, ImageDraw, ImageFont
+
+try:
+    import AppKit
+    from PyObjCTools import AppHelper
+
+    HAS_APPKIT = True
+except ImportError:
+    HAS_APPKIT = False
+
+
+def _make_icon_image(label: str) -> Image.Image:
+    """Small dark circle with a single letter — generated, no asset file.
+    PIL's zero-arg default font renders at a fixed, tiny size (a Cyrillic
+    glyph came out as ~4 lit pixels total in a 32x32 canvas — invisible at
+    actual menu-bar scale, confirmed by counting rendered pixels, not
+    guessed) — load_default(size=...) exists specifically to fix this."""
+    size = 32
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.ellipse((1, 1, size - 2, size - 2), fill=(40, 38, 46, 255))
+    font = ImageFont.load_default(size=20)
+    draw.text((size / 2, size / 2), label, fill=(255, 255, 255, 255), anchor="mm", font=font)
+    return img
+
+
+_REASSERT_DELAYS = (0.0, 0.1, 0.3, 0.6, 1.0, 2.0)
+
+
+def hide_from_dock() -> None:
+    """Hide the app from the Dock and Cmd+Tab, matching Type's "one-screen"
+    menu-bar-only feel. Call from __main__, on the main thread, before
+    webview.create_window()/webview.start().
+
+    A single call here is NOT reliable on its own — confirmed empirically,
+    including a real Objective-C swizzle attempt that hit infinite recursion
+    (AppKit.NSApplication.setActivationPolicy_, captured as a Python
+    reference before a Category patches it, still resolves to the PATCHED
+    version at call time — PyObjC methods aren't frozen the way a plain
+    Python function reference would be). pywebview's own cocoa.py forces
+    Regular policy the first time its module loads (lazily, inside
+    create_window()) — a single later call to set Accessory sometimes wins
+    the race against that and sometimes doesn't, non-deterministically,
+    across otherwise-identical runs of the same build (confirmed: two runs
+    of one unchanged binary gave different results). Brute-force fix:
+    reassert Accessory repeatedly over the first two seconds via
+    AppHelper.callLater, instead of trying to win the race with one call."""
+    if not HAS_APPKIT:
+        return
+    for delay in _REASSERT_DELAYS:
+        AppHelper.callLater(
+            delay,
+            AppKit.NSApplication.sharedApplication().setActivationPolicy_,
+            AppKit.NSApplicationActivationPolicyAccessory,
+        )
+
+
+def start_tray(window, label: str):
+    """Create the menu-bar icon. Call from __main__, on the main thread,
+    BEFORE webview.start() — webview.start() is what actually enters
+    NSApplication.run() afterward and starts servicing the icon's clicks.
+
+    window.hidden (pywebview's own attribute) only reflects the value passed
+    to create_window() at construction time and is never updated by
+    show()/hide() — so visibility is tracked locally here instead.
+
+    Returns (icon, hide) — `hide` is exposed so the in-window "Свернуть"
+    button can hide the window through the SAME state the tray menu toggles,
+    instead of calling window.hide() directly and desyncing the two.
+    """
+    is_hidden = False
+
+    def hide():
+        nonlocal is_hidden
+        window.hide()
+        is_hidden = True
+
+    def show():
+        nonlocal is_hidden
+        window.show()
+        is_hidden = False
+
+    def toggle(icon, item):
+        show() if is_hidden else hide()
+
+    def quit_app(icon, item):
+        icon.stop()
+        window.destroy()
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Показать/Скрыть", toggle, default=True),
+        pystray.MenuItem("Выход", quit_app),
+    )
+    icon = pystray.Icon(f"daily-standup-{label}", _make_icon_image(label), menu=menu)
+    icon.run_detached(setup=lambda icon: None)
+    icon.visible = True
+    return icon, hide

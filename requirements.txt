@@ -3,7 +3,10 @@ pymorphy3-dicts-ru
 pytest
 requests
 pywebview
+pystray
+Pillow
 speechmatics-rt
 sounddevice
 numpy
 audioop-lts; python_version >= "3.13"
+py2app

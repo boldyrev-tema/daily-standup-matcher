@@ -1,0 +1,6 @@
+#!/bin/bash
+# Silent double-click launcher — no Terminal window. Output goes to a log
+# file for debugging instead. See "Полоса (терминал).command" for the
+# visible-Terminal variant used while iterating on bugs.
+cd "/Users/tema/dev/daily_standup_matcher" || exit 1
+exec "venv/bin/python3.14" run_polosa_replay.py > "logs/polosa_launcher.log" 2>&1

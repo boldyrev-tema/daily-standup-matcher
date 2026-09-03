@@ -5,6 +5,7 @@ import time
 
 import webview
 
+import menubar
 from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from hints import get_hints
@@ -93,16 +94,34 @@ if __name__ == "__main__":
         on_top=True,
         transparent=True,
     )
+    # Must run AFTER create_window(): pywebview lazily imports its Cocoa
+    # backend inside create_window(), and that backend's own class body sets
+    # setActivationPolicy_(0) (Regular) itself — calling this any earlier
+    # gets silently overwritten (confirmed empirically: NSRunningApplication
+    # still reported policy 0 after a "before create_window" placement).
+    menubar.hide_from_dock()
+
+    tray_icon, hide_window = menubar.start_tray(window, "К")
 
     def minimize_window():
-        window.minimize()
+        hide_window()
 
     def close_window():
         # See run_second_screen.py's close_window — window.destroy() ending
         # the run loop before this call's own JS response goes out can
         # deadlock the whole process (confirmed live via py-spy). A short
         # delay lets the response go out first.
-        threading.Timer(0.15, window.destroy).start()
+        #
+        # tray_icon.stop() has the exact same hazard (AppKit call + blocking
+        # thread join) — deferred into the same delayed callback, not called
+        # synchronously here, for the same reason. See run_second_screen.py's
+        # close_window for the live report that caught this (2 сен: spinning
+        # cursor, window never closed).
+        def _do_close():
+            tray_icon.stop()
+            window.destroy()
+
+        threading.Timer(0.15, _do_close).start()
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()

@@ -6,6 +6,7 @@ import time
 
 import webview
 
+import menubar
 from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from facts import agenda_row, build_facts
@@ -269,9 +270,14 @@ if __name__ == "__main__":
         on_top=True,
         transparent=True,
     )
+    # Must run AFTER create_window() — see run_column.py's comment at the
+    # same call site for why.
+    menubar.hide_from_dock()
+
+    tray_icon, hide_window = menubar.start_tray(window, "Э")
 
     def minimize_window():
-        window.minimize()
+        hide_window()
 
     def close_window():
         # window.destroy() ends the Cocoa run loop webview.start() is
@@ -284,7 +290,18 @@ if __name__ == "__main__":
         # evaluate_js, waiting on a run loop that no longer existed. A short
         # delay lets this call's own response go out first, on a still-live
         # run loop, before destroy() ends it.
-        threading.Timer(0.15, window.destroy).start()
+        #
+        # tray_icon.stop() has the exact same hazard: it's an AppKit call
+        # (postEvent_atStart_) plus a blocking thread join, and calling it
+        # synchronously here — on the JS-bridge thread, not main — hung the
+        # window on a live test (2 сен, real user report: spinning cursor,
+        # never closed). Deferred into the same delayed callback as
+        # destroy() so it doesn't block this exposed call's own return either.
+        def _do_close():
+            tray_icon.stop()
+            window.destroy()
+
+        threading.Timer(0.15, _do_close).start()
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
