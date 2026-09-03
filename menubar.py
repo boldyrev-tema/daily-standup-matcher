@@ -117,3 +117,64 @@ def start_tray(window, label: str):
     icon.run_detached(setup=lambda icon: None)
     icon.visible = True
     return icon, hide
+
+
+def start_layout_tray(window, layouts, order, state_ref, on_select):
+    """Menu-bar icon for the unified app (run_app.py) — a submenu of
+    layouts (radio-style, checkmark on the active one) above the same
+    Показать/Скрыть + Выход pair start_tray already provides for the three
+    standalone scripts. Same safety rules as start_tray (see its docstring):
+    everything here runs on the main thread via run_detached, so a click
+    handler can call window.resize()/window.hide()/window.show()/
+    window.destroy() directly — no threading.Timer needed for THIS handler
+    itself (unlike each run_*.py's exposed close_window, which runs on the
+    JS-bridge thread instead and does need one).
+
+    `on_select(key)` does the actual layout switch (resize/load_url/push
+    the current meeting state into the new page) — this function only
+    builds the menu and calls it on click; it has no idea what a layout
+    switch actually does or what state.py/run_app.py's state shapes are.
+    """
+    is_hidden = False
+
+    def hide():
+        nonlocal is_hidden
+        window.hide()
+        is_hidden = True
+
+    def show():
+        nonlocal is_hidden
+        window.show()
+        is_hidden = False
+
+    def toggle(icon, item):
+        show() if is_hidden else hide()
+
+    def quit_app(icon, item):
+        icon.stop()
+        window.destroy()
+
+    def _select(key):
+        def _handler(icon, item):
+            on_select(key)
+            icon.update_menu()
+
+        return _handler
+
+    def _checked(key):
+        return lambda item: state_ref["layout"] == key
+
+    layout_items = [
+        pystray.MenuItem(layouts[key]["label"], _select(key), checked=_checked(key), radio=True)
+        for key in order
+    ]
+    menu = pystray.Menu(
+        *layout_items,
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Показать/Скрыть", toggle, default=True),
+        pystray.MenuItem("Выход", quit_app),
+    )
+    icon = pystray.Icon("daily-standup-app", _make_icon_image("Д"), menu=menu)
+    icon.run_detached(setup=lambda icon: None)
+    icon.visible = True
+    return icon, hide
