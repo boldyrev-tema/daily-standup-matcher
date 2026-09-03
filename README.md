@@ -4,9 +4,23 @@ Reconstruction of the "ядро без интерфейса" (core, no UI) slice
 daily-standup-copilot techspec — recognizes which sprint task is being
 discussed from a finalized speech utterance, or stays silent when unsure.
 
-Built without access to the original real code, real Fireflies transcripts,
-or a real Jira snapshot — see `docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md`
+Built without access to the original real code or real Fireflies
+transcripts — see `docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md`
 for what's a faithful reconstruction vs. an explicitly-flagged assumption.
+
+## Two ways to run it
+
+- **Script** — double-click one of the `.command` files in the repo root
+  (e.g. `Второй экран (терминал).command`), or run
+  `venv/bin/python3 run_second_screen.py` directly. Opens a visible
+  Terminal window, good for seeing errors live.
+- **App** — a packaged `.app` (see "Running as an app" below), no terminal
+  window at all. It does **not** show up in the Dock or Cmd+Tab — instead
+  it lives as a small icon in the menu bar at the top of the screen, which
+  toggles the window and lets you switch layout (unified build) or quit.
+
+Both run the exact same matching/hints code underneath — the app is just a
+different wrapper around the same scripts, not a separate implementation.
 
 ## Setup
 
