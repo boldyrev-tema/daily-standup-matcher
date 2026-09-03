@@ -15,7 +15,18 @@ from run_second_screen import LLM_KEY_PATH, TEAM, _WORD_RE, _apply_pending, _pri
 from sprint_snapshot import load_current_sprint
 
 
-def _run_replay(window, loaded_event):
+def _run_replay(window, loaded_event, closing=None):
+    """`closing` — real bug caught live via py-spy (4 сен): webview.start()
+    spawns this as a non-daemon thread, and once window.destroy() ends the
+    run loop, any evaluate_js() call still in flight blocks forever (no
+    timeout in pywebview's own implementation) — the whole process then
+    hangs in threading._shutdown(). push() below checks closing before
+    every evaluate_js call site, and the loop itself bails out early too.
+    """
+    def push(js: str) -> None:
+        if closing is None or not closing.is_set():
+            window.evaluate_js(js)
+
     try:
         # Wait for the page's real load event instead of guessing a fixed
         # delay — on a busy machine 3s isn't always enough and evaluate_js
@@ -31,13 +42,15 @@ def _run_replay(window, loaded_event):
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        push(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
         time.sleep(2)
         meeting.phase = "live"
 
         t = 0.0
         pending: tuple[Line, list] | None = None
         for turn in transcript:
+            if closing is not None and closing.is_set():
+                return
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
             time.sleep(pause)
@@ -60,22 +73,24 @@ def _run_replay(window, loaded_event):
                 if len(candidates) >= 2:
                     pending = (line, candidates)
 
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+            push(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
 
             if primary:
                 task = next(x for x in agenda if x.key == primary.task_key)
                 said, ask = get_hints(meeting.lines, task, api_key)
                 meeting.set_hints(said, ask)
-                window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+                push(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
 
                 while meeting.reveal_next_said():
                     time.sleep(1.2)
-                    window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+                    push(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
 
         meeting.phase = "after"
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        push(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
     except Exception as e:
         print(f"column replay failed: {e}", file=sys.stderr)
+        if closing is not None and closing.is_set():
+            return
         try:
             window.evaluate_js(
                 f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
@@ -103,10 +118,18 @@ if __name__ == "__main__":
 
     tray_icon, hide_window = menubar.start_tray(window, "К")
 
+    closing_event = threading.Event()
+
     def minimize_window():
         hide_window()
 
     def close_window():
+        # Set FIRST, synchronously — see run_second_screen.py's close_window
+        # and _run_replay's docstring for the real, py-spy-confirmed bug
+        # this guards against (4 сен): the replay thread is non-daemon and
+        # can hang forever in evaluate_js() after the window is destroyed.
+        closing_event.set()
+
         # See run_second_screen.py's close_window — window.destroy() ending
         # the run loop before this call's own JS response goes out can
         # deadlock the whole process (confirmed live via py-spy). A short
@@ -126,4 +149,4 @@ if __name__ == "__main__":
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
-    webview.start(_run_replay, (window, loaded_event))
+    webview.start(_run_replay, (window, loaded_event, closing_event))

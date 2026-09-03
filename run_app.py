@@ -36,19 +36,29 @@ LAYOUT_ORDER = ("second_screen", "column", "polosa")
 DEFAULT_LAYOUT = "second_screen"
 
 
-def _push_state(layout_key, window, meeting, agenda, alarm_task):
+def _push_state(layout_key, window, meeting, agenda, alarm_task, closing=None):
     """Полоса reads a reduced state shape (its own _state_json in
     run_polosa_replay.py, no alarm_task) — Колонка and Второй экран already
     share the rich one verbatim (run_column.py imports it as-is). Two
     existing builders, not unified into one — see the design spec for why.
+
+    `closing` — real bug caught live via py-spy (4 сен): webview.start()
+    spawns _run_replay/_run_live as a non-daemon thread, and once
+    window.destroy() ends the run loop, any evaluate_js() call still in
+    flight blocks forever (no timeout in pywebview's own implementation) —
+    the whole process then hangs in threading._shutdown(). Checked here so
+    every caller (the replay/live loops AND switch_layout's own push) is
+    covered by one guard.
     """
+    if closing is not None and closing.is_set():
+        return
     if layout_key == "polosa":
         window.evaluate_js(f"renderMeeting({_polosa_state_json(meeting, agenda)})")
     else:
         window.evaluate_js(f"renderMeeting({_rich_state_json(meeting, agenda, alarm_task)})")
 
 
-def _run_replay(window, loaded_event, state_ref, session_ref):
+def _run_replay(window, loaded_event, state_ref, session_ref, closing=None):
     try:
         # Same "wait for the real load event" reasoning as every other
         # run_*.py — see run_second_screen.py's _run_replay.
@@ -63,7 +73,7 @@ def _run_replay(window, loaded_event, state_ref, session_ref):
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
         session_ref.update(meeting=meeting, agenda=agenda, alarm_task=alarm_task)
-        push = lambda: _push_state(state_ref["layout"], window, meeting, agenda, alarm_task)
+        push = lambda: _push_state(state_ref["layout"], window, meeting, agenda, alarm_task, closing=closing)
         push()
         time.sleep(2)
         meeting.phase = "live"
@@ -71,12 +81,15 @@ def _run_replay(window, loaded_event, state_ref, session_ref):
         t = 0.0
         pending = None
         for turn in transcript:
+            if closing is not None and closing.is_set():
+                return
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
             time.sleep(pause)
             t += pause
             pending = _process_turn(
-                turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending, push=push
+                turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending, push=push,
+                closing=closing,
             )
 
         meeting.phase = "after"
@@ -85,7 +98,7 @@ def _run_replay(window, loaded_event, state_ref, session_ref):
         print(f"unified app replay failed: {e}", file=sys.stderr)
 
 
-def _run_live(window, loaded_event, state_ref, session_ref):
+def _run_live(window, loaded_event, state_ref, session_ref, closing=None):
     try:
         loaded_event.wait(timeout=10)
 
@@ -97,7 +110,7 @@ def _run_live(window, loaded_event, state_ref, session_ref):
 
         meeting = Meeting(phase="live", remaining_count=len(agenda))
         session_ref.update(meeting=meeting, agenda=agenda, alarm_task=alarm_task)
-        push = lambda: _push_state(state_ref["layout"], window, meeting, agenda, alarm_task)
+        push = lambda: _push_state(state_ref["layout"], window, meeting, agenda, alarm_task, closing=closing)
         push()
 
         state = {"pending": None}
@@ -105,10 +118,13 @@ def _run_live(window, loaded_event, state_ref, session_ref):
         start = time.monotonic()
 
         def on_turn(speaker: str, text: str) -> None:
+            if closing is not None and closing.is_set():
+                return
             with lock:
                 t = time.monotonic() - start
                 state["pending"] = _process_turn(
-                    speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"], push=push
+                    speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"], push=push,
+                    closing=closing,
                 )
 
         session = LiveAudioSession(speechmatics_key, on_turn, additional_vocab=build_additional_vocab(agenda))
@@ -153,6 +169,7 @@ if __name__ == "__main__":
     session_ref = {"meeting": None, "agenda": None, "alarm_task": None}
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
+    closing_event = threading.Event()
 
     def switch_layout(key):
         """Runs on the main thread (tray click handler) — resize/load_url
@@ -172,7 +189,10 @@ if __name__ == "__main__":
 
         def _wait_and_push():
             if loaded_event.wait(timeout=10) and session_ref["meeting"] is not None:
-                _push_state(key, window, session_ref["meeting"], session_ref["agenda"], session_ref["alarm_task"])
+                _push_state(
+                    key, window, session_ref["meeting"], session_ref["agenda"], session_ref["alarm_task"],
+                    closing=closing_event,
+                )
 
         threading.Thread(target=_wait_and_push, daemon=True).start()
 
@@ -182,6 +202,13 @@ if __name__ == "__main__":
         hide_window()
 
     def close_window():
+        # Set FIRST, synchronously — real py-spy-confirmed bug (4 сен): the
+        # replay/live thread is non-daemon and can hang forever in
+        # evaluate_js() after the window is destroyed, since that thread
+        # doesn't otherwise know the window (and its run loop) are gone. See
+        # _push_state's docstring for the full story.
+        closing_event.set()
+
         # Same deadlock-avoidance shape as every other run_*.py's
         # close_window — see run_second_screen.py's for the full
         # py-spy-confirmed reasoning.
@@ -223,4 +250,4 @@ if __name__ == "__main__":
             threading.Thread(target=_show_recap, daemon=True).start()
 
     target = _run_live if is_live else _run_replay
-    webview.start(target, (window, loaded_event, state_ref, session_ref))
+    webview.start(target, (window, loaded_event, state_ref, session_ref, closing_event))

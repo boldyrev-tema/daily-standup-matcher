@@ -55,7 +55,18 @@ def _state_json(meeting: Meeting, agenda) -> str:
     })
 
 
-def _run_replay(window, loaded_event):
+def _run_replay(window, loaded_event, closing=None):
+    """`closing` — real bug caught live via py-spy (4 сен): webview.start()
+    spawns this as a non-daemon thread, and once window.destroy() ends the
+    run loop, any evaluate_js() call still in flight blocks forever (no
+    timeout in pywebview's own implementation) — the whole process then
+    hangs in threading._shutdown(). push() below checks closing before
+    every evaluate_js call site, and the loop itself bails out early too.
+    """
+    def push(js: str) -> None:
+        if closing is None or not closing.is_set():
+            window.evaluate_js(js)
+
     try:
         # Wait for the page's real load event instead of guessing a fixed
         # delay — on a busy machine 3s isn't always enough and evaluate_js
@@ -73,6 +84,8 @@ def _run_replay(window, loaded_event):
         t = 0.0
         pending: tuple[Line, list] | None = None
         for turn in transcript:
+            if closing is not None and closing.is_set():
+                return
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
             time.sleep(pause)
@@ -94,7 +107,7 @@ def _run_replay(window, loaded_event):
 
             # Push immediately so the new line + task card appear without
             # waiting on the (up to 3s) Groq call below.
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda)})")
+            push(f"renderMeeting({_state_json(meeting, agenda)})")
 
             if primary:
                 task = next(x for x in agenda if x.key == primary.task_key)
@@ -109,12 +122,14 @@ def _run_replay(window, loaded_event):
                 meeting.set_hints(said, ask)
                 # Second push once hints are ready, so the ask/said pill
                 # appears without having blocked the earlier push above.
-                window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda)})")
+                push(f"renderMeeting({_state_json(meeting, agenda)})")
 
         meeting.phase = "after"
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda)})")
+        push(f"renderMeeting({_state_json(meeting, agenda)})")
     except Exception as e:
         print(f"polosa replay failed: {e}", file=sys.stderr)
+        if closing is not None and closing.is_set():
+            return
         try:
             window.evaluate_js(
                 f"document.getElementById('hear-text').textContent = {json.dumps(f'Ошибка: {e}')}"
@@ -139,10 +154,18 @@ if __name__ == "__main__":
 
     tray_icon, hide_window = menubar.start_tray(window, "П")
 
+    closing_event = threading.Event()
+
     def minimize_window():
         hide_window()
 
     def close_window():
+        # Set FIRST, synchronously — see run_second_screen.py's close_window
+        # and _run_replay's docstring for the real, py-spy-confirmed bug
+        # this guards against (4 сен): the replay thread is non-daemon and
+        # can hang forever in evaluate_js() after the window is destroyed.
+        closing_event.set()
+
         # See run_second_screen.py's close_window — window.destroy() ending
         # the run loop before this call's own JS response goes out can
         # deadlock the whole process (confirmed live via py-spy). A short
@@ -162,4 +185,4 @@ if __name__ == "__main__":
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
-    webview.start(_run_replay, (window, loaded_event))
+    webview.start(_run_replay, (window, loaded_event, closing_event))

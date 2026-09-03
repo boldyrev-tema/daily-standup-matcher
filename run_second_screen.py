@@ -107,7 +107,7 @@ def _state_json(meeting: Meeting, agenda, alarm_task) -> str:
     })
 
 
-def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending, push=None):
+def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending, push=None, closing=None):
     """One utterance through the full pipeline: match -> pending-carryover
     resolution -> Meeting/Line bookkeeping -> render -> hints. Shared by the
     file replay (_run_replay) and the live-microphone path (_run_live) so
@@ -120,9 +120,25 @@ def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window
     screen (see run_app.py's _push_state) — the one caller allowed to
     override this, since it's the only one juggling more than one layout on
     the same window.
+
+    `closing` is a threading.Event set the instant the close button fires
+    (see __main__'s close_window) — real bug, caught live via py-spy (4 сен):
+    webview.start() spawns the replay/live thread as non-daemon, and once
+    window.destroy() ends the run loop, any evaluate_js() call from this
+    thread blocks forever waiting for a JS response that can never arrive
+    (no timeout in pywebview's own implementation) — the process then hangs
+    in threading._shutdown() forever, waiting on this exact thread, which
+    LOOKS like the same close deadlock already fixed but is a different bug
+    one level up: the replay loop itself didn't know the window was gone.
+    Checked here, not just in the caller's loop, so every push() call site
+    (recognition, hints, the reveal-loop) is covered by one guard.
     """
+    if closing is not None and closing.is_set():
+        return pending
     if push is None:
-        push = lambda: window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        push = lambda: None if (closing is not None and closing.is_set()) else window.evaluate_js(
+            f"renderMeeting({_state_json(meeting, agenda, alarm_task)})"
+        )
 
     results = match(text, agenda)
     primary = _primary_match(results)
@@ -156,7 +172,7 @@ def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window
     return pending
 
 
-def _run_replay(window, loaded_event):
+def _run_replay(window, loaded_event, closing=None):
     try:
         # Wait for the page's real load event instead of guessing a fixed
         # delay — on a busy machine 3s isn't always enough and evaluate_js
@@ -172,25 +188,32 @@ def _run_replay(window, loaded_event):
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        if closing is None or not closing.is_set():
+            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
         time.sleep(2)
         meeting.phase = "live"
 
         t = 0.0
         pending: tuple[Line, list] | None = None
         for turn in transcript:
+            if closing is not None and closing.is_set():
+                return
             word_count = len(_WORD_RE.findall(turn["text"]))
             pause = max(word_count, 1) * 0.4
             time.sleep(pause)
             t += pause
             pending = _process_turn(
-                turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending
+                turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending,
+                closing=closing,
             )
 
         meeting.phase = "after"
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        if closing is None or not closing.is_set():
+            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
     except Exception as e:
         print(f"second screen replay failed: {e}", file=sys.stderr)
+        if closing is not None and closing.is_set():
+            return
         try:
             window.evaluate_js(
                 f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
@@ -199,11 +222,16 @@ def _run_replay(window, loaded_event):
             pass
 
 
-def _run_live(window, loaded_event):
+def _run_live(window, loaded_event, closing=None):
     """Live daily: replaces sample_daily_transcript.json with a real
     Speechmatics stream off the mic (+ system/call audio if
     SYSTEM_AUDIO_DUMP_PATH is set — see live_audio.py). Matcher, agenda,
     hints, window — all unchanged, same as _process_turn shared with replay.
+
+    `closing` — see _process_turn's docstring for the real, py-spy-confirmed
+    bug this guards against (4 сен): without it, a turn recognized right as
+    the window closes can hang this thread in evaluate_js() forever, which
+    hangs process shutdown since webview.start() spawns this non-daemon.
     """
     try:
         loaded_event.wait(timeout=10)
@@ -215,7 +243,8 @@ def _run_live(window, loaded_event):
         speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")
 
         meeting = Meeting(phase="live", remaining_count=len(agenda))
-        window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        if closing is None or not closing.is_set():
+            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
 
         state = {"pending": None}
         lock = threading.Lock()
@@ -224,10 +253,13 @@ def _run_live(window, loaded_event):
         def on_turn(speaker: str, text: str) -> None:
             # Speechmatics calls this from its own asyncio thread — one turn
             # processed at a time so pending-carryover state can't race.
+            if closing is not None and closing.is_set():
+                return
             with lock:
                 t = time.monotonic() - start
                 state["pending"] = _process_turn(
-                    speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"]
+                    speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"],
+                    closing=closing,
                 )
 
         session = LiveAudioSession(speechmatics_key, on_turn, additional_vocab=build_additional_vocab(agenda))
@@ -262,6 +294,8 @@ def _run_live(window, loaded_event):
         print("Живой микрофон запущен — говорите; закройте окно, чтобы остановить.")
     except Exception as e:
         print(f"live run failed: {e}", file=sys.stderr)
+        if closing is not None and closing.is_set():
+            return
         try:
             window.evaluate_js(
                 f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
@@ -286,10 +320,22 @@ if __name__ == "__main__":
 
     tray_icon, hide_window = menubar.start_tray(window, "Э")
 
+    closing_event = threading.Event()
+
     def minimize_window():
         hide_window()
 
     def close_window():
+        # Set FIRST, synchronously, not deferred — a real py-spy-confirmed
+        # bug (4 сен): webview.start() spawns _run_replay/_run_live as a
+        # non-daemon thread, and once window.destroy() ends the run loop,
+        # any evaluate_js() call still in flight from that thread blocks
+        # forever (no timeout in pywebview's own implementation) — the
+        # whole process then hangs in threading._shutdown(), waiting on a
+        # thread that can never finish. closing_event lets that thread
+        # notice and stop pushing before destroy() ever runs.
+        closing_event.set()
+
         # window.destroy() ends the Cocoa run loop webview.start() is
         # driving. If that happens before THIS exposed call's own return
         # value has gone back to JS (also delivered through that same main-
@@ -349,4 +395,4 @@ if __name__ == "__main__":
             threading.Thread(target=_show_recap, daemon=True).start()
 
     target = _run_live if is_live else _run_replay
-    webview.start(target, (window, loaded_event))
+    webview.start(target, (window, loaded_event, closing_event))
