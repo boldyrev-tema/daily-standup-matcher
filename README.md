@@ -66,6 +66,8 @@ venv/bin/python3 -m pytest -v
   closes that gap.
 - `fixtures/sprint.json` — 6 invented tasks (no real company data) covering
   every test case in the spec, including two live-bug regression cases.
+- `jira_client.py` + `sprint_snapshot.load_current_sprint()` — optional live
+  Jira fetch instead of the fixture, see "Live Jira snapshot" below.
 - `facts.py` — deterministic 2-5 line Jira-fact builder from a `Task`.
 - `meeting.py` — `Line`/`Meeting` state: recognized-task tracking, progressive
   one-at-a-time reveal of LLM "said" lines.
@@ -222,6 +224,45 @@ enable it; without it, only the microphone channel ("Ты") runs.
 `--live` is opt-in — `python3 run_second_screen.py` (no flag) still runs the
 deterministic file replay, unchanged, for demos/tests.
 
+## Live Jira snapshot (`jira_client.py` + `sprint_snapshot.load_current_sprint`)
+
+Real feedback (Rinat, tested on a real call, 3 сен): «нужно всегда заранее
+адженду разговора создавать иначе он не понимает о чём речь». Without this,
+every `run_*.py` hardcoded `fixtures/sprint.json` — a human had to hand-build
+a snapshot before every single call, or the matcher had nothing real to
+recognize speech against.
+
+Add `~/.credentials/jira_credentials.env`:
+
+```
+JIRA_BASE_URL=https://your-site.atlassian.net
+JIRA_EMAIL=you@example.com
+JIRA_API_TOKEN=...
+JIRA_JQL=project = X AND sprint in openSprints() ORDER BY updated DESC
+JIRA_TEAM=Имя Первого, Имя Второго
+```
+
+(`JIRA_PROJECT_KEY=X` works instead of `JIRA_JQL` — a default JQL gets built
+from it.) With this file present, every `run_*.py` fetches the live sprint
+at launch instead of reading the fixture — same `Task` shape either way, no
+other code changes needed. Read-only: only `POST /rest/api/3/search/jql` is
+ever called (Rinat's techspec rule 8, "в Jira ничего не изменено" —
+`jira_client.py` has no write path at all, not even one guarded by a flag).
+
+No credentials file, or the fetch fails for any reason (bad JQL, expired
+token, network) → falls back to `fixtures/sprint.json` + the module's
+hardcoded `TEAM` constant, same as before, with a stderr note in the failure
+case. Nobody without Jira set up (including this repo's own tests/demo) is
+affected.
+
+**Unverified against a real Jira instance** — no credentials exist on this
+machine for this project or the sibling `meeting_copilot` project it
+borrowed the auth pattern from. Built TDD against mocked HTTP responses
+shaped like the field set already confirmed live in this project's history
+(see `docs/superpowers/specs/2026-09-03-live-jira-snapshot-design.md`).
+Needs Rinat or the user to actually set the credentials file and run it once
+against a real sprint before this is more than "should work."
+
 ## Post-daily recap (`recap.py` + `recap.html`)
 
 On closing a `--live` window, the app builds a short recap of what was
@@ -285,10 +326,11 @@ build.
 
 ## Known gaps in this iteration
 
-Not yet done: real Jira snapshot (still `fixtures/sprint.json` — the live
-microphone above only replaces the transcript side), speaker diarization on
-the live path (both channels are pre-labeled "Ты"/"Собеседник" by which
-audio device they came from, not detected), the Начать/Сначала button's
+Not yet done: live Jira fetch is built (see "Live Jira snapshot" above) but
+**unverified against a real instance** — no credentials exist on this
+machine to actually run it once. Speaker diarization on the live path (both
+channels are pre-labeled "Ты"/"Собеседник" by which audio device they came
+from, not detected), the Начать/Сначала button's
 click handler on "Полоса" and "Колонка" (the replay auto-starts instead —
 see `docs/superpowers/specs/2026-08-29-polosa-replay-design.md` for why).
 The PRD gate (3-4 real live dailies with hand-counted recognition/latency)
