@@ -311,7 +311,7 @@ if __name__ == "__main__":
             tray_icon.stop()
             window.destroy()
 
-        threading.Timer(0.15, _do_close).start()
+        menubar.defer(0.15, _do_close)
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
@@ -336,7 +336,7 @@ if __name__ == "__main__":
             def close_recap_window():
                 # Same fix as the main window's close_window — see its
                 # comment for why a bare thread isn't enough.
-                threading.Timer(0.15, recap_window.destroy).start()
+                menubar.defer(0.15, recap_window.destroy)
 
             recap_window.expose(close_recap_window)
             recap_loaded_event = threading.Event()

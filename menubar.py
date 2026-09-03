@@ -19,6 +19,8 @@ webview.start(). Its default `setup` callback also touches AppKit
 that default is suppressed here too — visibility is set directly, still on
 the main thread.
 """
+import threading
+
 import pystray
 from PIL import Image, ImageDraw, ImageFont
 
@@ -29,6 +31,30 @@ try:
     HAS_APPKIT = True
 except ImportError:
     HAS_APPKIT = False
+
+
+def defer(delay: float, fn) -> None:
+    """Schedule fn to run after `delay` seconds, on the Cocoa main thread —
+    NOT on a plain Python timer thread. Every close_window() in this
+    project defers window.destroy()/tray_icon.stop() by a short delay so
+    the JS-bridge call's own response goes out on a still-live run loop
+    first (py-spy-confirmed deadlock otherwise, 2 сен: window.destroy()
+    ending the run loop before its own JS response was delivered). The
+    delay was originally a threading.Timer — but that fires its callback on
+    a THIRD thread (neither main nor the JS-bridge thread), and
+    window.destroy() is itself an AppKit call, which AppKit only really
+    guarantees safe from the main thread. Under load (a live Speechmatics
+    session running — mic + system-audio + asyncio threads all active) a
+    close hung again despite this exact delay having worked in lower-thread-
+    count demo-mode testing, consistent with that call executing off the
+    main thread being the actually-unreliable part, not the delay length
+    itself. AppHelper.callLater runs its callback through the Cocoa run
+    loop on the main thread, same mechanism hide_from_dock() already uses
+    for the same reason."""
+    if HAS_APPKIT:
+        AppHelper.callLater(delay, fn)
+    else:
+        threading.Timer(delay, fn).start()
 
 
 # PIL's built-in load_default() bitmap font has no Cyrillic glyphs at all —

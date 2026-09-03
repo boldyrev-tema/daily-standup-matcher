@@ -121,7 +121,7 @@ if __name__ == "__main__":
             tray_icon.stop()
             window.destroy()
 
-        threading.Timer(0.15, _do_close).start()
+        menubar.defer(0.15, _do_close)
 
     window.expose(minimize_window, close_window)
     loaded_event = threading.Event()
