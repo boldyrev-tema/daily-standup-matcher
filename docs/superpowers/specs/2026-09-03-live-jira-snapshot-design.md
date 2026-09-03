@@ -1,13 +1,13 @@
 # Live Jira snapshot — removing the "prepare an agenda by hand" limit
 
-## Why (Rinat, real call, 3 сен 07:54)
+## Why (real call, 3 сен 07:54)
 
 > «Я протестил на звонке и есть сложность что у него контекст ограничен и
 > как будто нужно всегда заранее адженду разговора создавать иначе он не
 > понимает о чём речь»
 
 Not a bug in the matcher — it's the original, still-unimplemented item from
-his own initial handoff list (29 авг): `snapshot.py` — переписать: сейчас
+the initial handoff list (29 авг): `snapshot.py` — переписать: сейчас
 работает вручную через MCP в чате, нужен HTTP-вариант с токеном. Every
 `run_*.py` still hardcodes `load_sprint("fixtures/sprint.json")` — a human
 has to hand-build a JSON snapshot before every single call, or the matcher
@@ -23,9 +23,8 @@ real Jira automatically at launch, no manual step per call.
   passing `nextPageToken` back in the next request body until `isLast` (or
   no token).
 - Auth: HTTP Basic, `(email, api_token)` — an Atlassian API token, not
-  OAuth. Confirmed against this exact pattern already working in the sibling
-  `meeting_copilot` project's `jira_client.py`
-  (`~/Desktop/Rinat Work/meeting_copilot/jira_client.py`): `requests.post(
+  OAuth. Confirmed against this exact pattern already working in a sibling
+  project's `jira_client.py` on this machine: `requests.post(
   f"{base_url}/rest/api/3/issue", json=payload, auth=(email, api_token))`
   for ticket creation — same base URL shape, same auth shape, real prior
   art against what's presumably the same real Jira instance. That file
@@ -40,10 +39,10 @@ real Jira automatically at launch, no manual step per call.
   `~/.credentials/` has no `jira_credentials.env`. This can only be
   built and verified against mocked HTTP responses (TDD), not a live call.
   Flagged honestly, same as every other credential-gated feature in this
-  project (OpenRouter/Speechmatics were the same story until Rinat or the
-  user actually ran it).
+  project (OpenRouter/Speechmatics were the same story until someone
+  actually ran it).
 
-## Invariant that must not move (Rinat's techspec, rule 8)
+## Invariant that must not move (the original techspec, rule 8)
 
 «В Jira ничего не изменено» — this client is read-only. `jira_client.py`
 here gets exactly one write-shaped capability: none. Only
@@ -88,6 +87,6 @@ itself, not just here — an easy invariant to accidentally break later.
   null-assignee/null-priority edge cases Jira allows.
 - Full test suite must stay green.
 - Cannot be verified against a real Jira instance in this session (no
-  token). Documented as an open item for the user/Rinat to close by
-  actually setting `~/.credentials/jira_credentials.env` and running it
-  once against a real sprint.
+  token). Documented as an open item, to close by actually setting
+  `~/.credentials/jira_credentials.env` and running it once against a real
+  sprint.

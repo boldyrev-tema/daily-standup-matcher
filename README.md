@@ -226,11 +226,10 @@ deterministic file replay, unchanged, for demos/tests.
 
 ## Live Jira snapshot (`jira_client.py` + `sprint_snapshot.load_current_sprint`)
 
-Real feedback (Rinat, tested on a real call, 3 сен): «нужно всегда заранее
-адженду разговора создавать иначе он не понимает о чём речь». Without this,
-every `run_*.py` hardcoded `fixtures/sprint.json` — a human had to hand-build
-a snapshot before every single call, or the matcher had nothing real to
-recognize speech against.
+Real feedback from a live call: the matcher only recognizes tasks against
+a pre-loaded agenda, and until now that agenda was a hand-edited local
+file — someone had to build a fresh `fixtures/sprint.json` before every
+single call, or the matcher had nothing real to recognize speech against.
 
 Add `~/.credentials/jira_credentials.env`:
 
@@ -245,9 +244,9 @@ JIRA_TEAM=Имя Первого, Имя Второго
 (`JIRA_PROJECT_KEY=X` works instead of `JIRA_JQL` — a default JQL gets built
 from it.) With this file present, every `run_*.py` fetches the live sprint
 at launch instead of reading the fixture — same `Task` shape either way, no
-other code changes needed. Read-only: only `POST /rest/api/3/search/jql` is
-ever called (Rinat's techspec rule 8, "в Jira ничего не изменено" —
-`jira_client.py` has no write path at all, not even one guarded by a flag).
+other code changes needed. Read-only, same as everywhere else in this
+project — only a search call is ever made, nothing here can write back to
+Jira.
 
 No credentials file, or the fetch fails for any reason (bad JQL, expired
 token, network) → falls back to `fixtures/sprint.json` + the module's
@@ -255,13 +254,11 @@ hardcoded `TEAM` constant, same as before, with a stderr note in the failure
 case. Nobody without Jira set up (including this repo's own tests/demo) is
 affected.
 
-**Unverified against a real Jira instance** — no credentials exist on this
-machine for this project or the sibling `meeting_copilot` project it
-borrowed the auth pattern from. Built TDD against mocked HTTP responses
-shaped like the field set already confirmed live in this project's history
+**Unverified against a real Jira instance** — no credentials were available
+to test with, so this is built and tested against mocked responses only
 (see `docs/superpowers/specs/2026-09-03-live-jira-snapshot-design.md`).
-Needs Rinat or the user to actually set the credentials file and run it once
-against a real sprint before this is more than "should work."
+Needs someone to actually set the credentials file and run it once against
+a real sprint before this is more than "should work."
 
 ## Post-daily recap (`recap.py` + `recap.html`)
 
