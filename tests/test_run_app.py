@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 
 from meeting import Meeting
@@ -11,6 +12,19 @@ NOW = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 def _task(key, title):
     return Task(key=key, title=title, assignee="Дарья", status="В работе", updated_at=NOW)
+
+
+def _wait_until(predicate, timeout=2.0):
+    # _push_state fires window.evaluate_js() in its own daemon thread (see
+    # _safe_evaluate_js's docstring in run_second_screen.py — a real
+    # py-spy-confirmed hang, not a style choice), so calls against
+    # _FakeWindow land asynchronously. Poll instead of asserting immediately.
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return predicate()
 
 
 class _FakeWindow:
@@ -36,7 +50,7 @@ def test_push_state_uses_polosa_shape_for_polosa_layout():
 
     _push_state("polosa", window, meeting, agenda, None)
 
-    assert window.scripts == [f"renderMeeting({_polosa_state_json(meeting, agenda)})"]
+    assert _wait_until(lambda: window.scripts == [f"renderMeeting({_polosa_state_json(meeting, agenda)})"])
 
 
 def test_push_state_uses_rich_shape_for_column_and_second_screen():
@@ -46,4 +60,4 @@ def test_push_state_uses_rich_shape_for_column_and_second_screen():
     for key in ("column", "second_screen"):
         window = _FakeWindow()
         _push_state(key, window, meeting, agenda, None)
-        assert window.scripts == [f"renderMeeting({_rich_state_json(meeting, agenda, None)})"]
+        assert _wait_until(lambda: window.scripts == [f"renderMeeting({_rich_state_json(meeting, agenda, None)})"])

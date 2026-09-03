@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 
 import run_second_screen
@@ -6,6 +7,20 @@ from run_second_screen import _process_turn
 from sprint_snapshot import Task
 
 NOW = datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+
+def _wait_until(predicate, timeout=2.0):
+    # The default push now goes through _safe_evaluate_js, which fires
+    # window.evaluate_js() in its own daemon thread (see its docstring for
+    # why — a real py-spy-confirmed hang, not a style choice), so calls
+    # against _FakeWindow land asynchronously. Poll instead of asserting
+    # immediately after _process_turn() returns.
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return predicate()
 
 
 def _task(key, title):
@@ -40,7 +55,7 @@ def test_process_turn_recognizes_task_and_fetches_hints(monkeypatch):
     assert meeting.done == ["A-1"]
     assert meeting.said == ["уже сказали"]
     assert meeting.ask == "спроси про Х"
-    assert window.calls >= 2  # at least the recognition render + the hints render
+    assert _wait_until(lambda: window.calls >= 2)  # at least the recognition render + the hints render
 
 
 def test_process_turn_stays_silent_and_sets_pending_on_ambiguous_tie():

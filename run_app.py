@@ -23,7 +23,7 @@ from live_audio import LiveAudioSession, build_additional_vocab
 from meeting import Meeting
 from recap import build_recap, latest_recap, save_recap
 from run_polosa_replay import _state_json as _polosa_state_json
-from run_second_screen import LLM_KEY_PATH, SPEECHMATICS_KEY_PATH, TEAM, _WORD_RE, _process_turn
+from run_second_screen import LLM_KEY_PATH, SPEECHMATICS_KEY_PATH, TEAM, _WORD_RE, _process_turn, _safe_evaluate_js
 from run_second_screen import _state_json as _rich_state_json
 from sprint_snapshot import load_current_sprint
 
@@ -42,20 +42,17 @@ def _push_state(layout_key, window, meeting, agenda, alarm_task, closing=None):
     share the rich one verbatim (run_column.py imports it as-is). Two
     existing builders, not unified into one — see the design spec for why.
 
-    `closing` — real bug caught live via py-spy (4 сен): webview.start()
-    spawns _run_replay/_run_live as a non-daemon thread, and once
-    window.destroy() ends the run loop, any evaluate_js() call still in
-    flight blocks forever (no timeout in pywebview's own implementation) —
-    the whole process then hangs in threading._shutdown(). Checked here so
-    every caller (the replay/live loops AND switch_layout's own push) is
-    covered by one guard.
+    `closing` — see _safe_evaluate_js's docstring (run_second_screen.py) for
+    the real, py-spy-confirmed bug this guards against (4 сен, hit TWICE
+    with the exact same stack): a `closing` check before the call alone
+    isn't enough — it can't rescue a call that had already started a moment
+    earlier. _safe_evaluate_js runs the actual evaluate_js() in its own
+    daemon thread, which is what actually makes a hung call harmless.
     """
-    if closing is not None and closing.is_set():
-        return
     if layout_key == "polosa":
-        window.evaluate_js(f"renderMeeting({_polosa_state_json(meeting, agenda)})")
+        _safe_evaluate_js(window, f"renderMeeting({_polosa_state_json(meeting, agenda)})", closing)
     else:
-        window.evaluate_js(f"renderMeeting({_rich_state_json(meeting, agenda, alarm_task)})")
+        _safe_evaluate_js(window, f"renderMeeting({_rich_state_json(meeting, agenda, alarm_task)})", closing)
 
 
 def _run_replay(window, loaded_event, state_ref, session_ref, closing=None):

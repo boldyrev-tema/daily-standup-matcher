@@ -13,7 +13,7 @@ from facts import build_facts
 from hints import get_hints
 from match_core import ambiguous_candidates, match
 from meeting import Line, Meeting
-from run_second_screen import _apply_pending
+from run_second_screen import _apply_pending, _safe_evaluate_js
 from sprint_snapshot import load_current_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
@@ -56,16 +56,18 @@ def _state_json(meeting: Meeting, agenda) -> str:
 
 
 def _run_replay(window, loaded_event, closing=None):
-    """`closing` — real bug caught live via py-spy (4 сен): webview.start()
-    spawns this as a non-daemon thread, and once window.destroy() ends the
-    run loop, any evaluate_js() call still in flight blocks forever (no
-    timeout in pywebview's own implementation) — the whole process then
-    hangs in threading._shutdown(). push() below checks closing before
-    every evaluate_js call site, and the loop itself bails out early too.
+    """`closing` — see _safe_evaluate_js's docstring (run_second_screen.py)
+    for the real, py-spy-confirmed bug this guards against (4 сен, hit
+    TWICE with the same stack): evaluate_js() has no timeout in pywebview's
+    own implementation, so a call still in flight when window.destroy()
+    ends the run loop blocks its thread forever — fatal since
+    webview.start() spawns this as non-daemon. Every evaluate_js call site
+    goes through _safe_evaluate_js (fires the call in its own daemon
+    thread, so even a hung call can never block process shutdown); the loop
+    itself also bails out early once closing is set.
     """
     def push(js: str) -> None:
-        if closing is None or not closing.is_set():
-            window.evaluate_js(js)
+        _safe_evaluate_js(window, js, closing)
 
     try:
         # Wait for the page's real load event instead of guessing a fixed
@@ -128,14 +130,7 @@ def _run_replay(window, loaded_event, closing=None):
         push(f"renderMeeting({_state_json(meeting, agenda)})")
     except Exception as e:
         print(f"polosa replay failed: {e}", file=sys.stderr)
-        if closing is not None and closing.is_set():
-            return
-        try:
-            window.evaluate_js(
-                f"document.getElementById('hear-text').textContent = {json.dumps(f'Ошибка: {e}')}"
-            )
-        except Exception:
-            pass
+        push(f"document.getElementById('hear-text').textContent = {json.dumps(f'Ошибка: {e}')}")
 
 
 if __name__ == "__main__":

@@ -80,15 +80,29 @@ def _load_label_font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default(size=size)
 
 
+# Menu-bar icon target size — macOS status items render at ~22pt, so 44px
+# is the natural @2x size (matches every other icon in that bar, which are
+# all Retina-rendered). Drawn at 4x that (176px) and downsampled with
+# LANCZOS for antialiasing, then rebuilt from the alpha channel: PIL's
+# ImageDraw has no antialiasing of its own — ellipse()/text() at the final
+# 32px size drew hard, unantialiased pixel edges, which is what made the
+# icon look chunky/pixelated next to every neighboring icon's smooth
+# circles (found by comparing a real screenshot of the menu bar directly,
+# not guessed).
+_ICON_SIZE = 44
+_SUPERSAMPLE = 4
+
+
 def _make_icon_image(label: str) -> Image.Image:
     """Small dark circle with a single letter — generated, no asset file."""
-    size = 32
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    big = _SUPERSAMPLE * _ICON_SIZE
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.ellipse((1, 1, size - 2, size - 2), fill=(40, 38, 46, 255))
-    font = _load_label_font(20)
-    draw.text((size / 2, size / 2), label, fill=(255, 255, 255, 255), anchor="mm", font=font)
-    return img
+    margin = _SUPERSAMPLE * 2
+    draw.ellipse((margin, margin, big - margin, big - margin), fill=(40, 38, 46, 255))
+    font = _load_label_font(int(big * 0.55))
+    draw.text((big / 2, big / 2), label, fill=(255, 255, 255, 255), anchor="mm", font=font)
+    return img.resize((_ICON_SIZE, _ICON_SIZE), Image.LANCZOS)
 
 
 _REASSERT_DELAYS = (0.0, 0.1, 0.3, 0.6, 1.0, 2.0)

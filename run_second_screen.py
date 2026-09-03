@@ -107,6 +107,34 @@ def _state_json(meeting: Meeting, agenda, alarm_task) -> str:
     })
 
 
+def _safe_evaluate_js(window, script: str, closing=None) -> None:
+    """Fire-and-forget wrapper around window.evaluate_js(). Real bug, caught
+    live via py-spy TWICE (4 сен, same stack both times): pywebview's own
+    evaluate_js blocks on a plain Semaphore(0).acquire() with NO timeout at
+    all (confirmed by reading webview/platforms/cocoa.py directly) — if
+    window.destroy() ends the run loop while a call is still in flight, the
+    calling thread waits forever for a JS response that can now never
+    arrive. A `closing` flag checked BEFORE the call (first fix) stops new
+    calls from starting, but can't rescue a call that had already started
+    a moment earlier — that's exactly the second hang, same stack, same
+    line. Running the actual evaluate_js() in its own daemon thread is the
+    real fix: even if THAT thread hangs forever, a daemon thread can never
+    block process shutdown (threading._shutdown() only waits on non-daemon
+    threads) — `closing` is now just an optimization to skip pointless
+    calls, not the safety mechanism.
+    """
+    if closing is not None and closing.is_set():
+        return
+
+    def _run():
+        try:
+            window.evaluate_js(script)
+        except Exception:
+            pass  # matches every prior call site's own silent best-effort try/except
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending, push=None, closing=None):
     """One utterance through the full pipeline: match -> pending-carryover
     resolution -> Meeting/Line bookkeeping -> render -> hints. Shared by the
@@ -119,25 +147,14 @@ def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window
     passes its own push that dispatches to whichever layout is currently on
     screen (see run_app.py's _push_state) — the one caller allowed to
     override this, since it's the only one juggling more than one layout on
-    the same window.
-
-    `closing` is a threading.Event set the instant the close button fires
-    (see __main__'s close_window) — real bug, caught live via py-spy (4 сен):
-    webview.start() spawns the replay/live thread as non-daemon, and once
-    window.destroy() ends the run loop, any evaluate_js() call from this
-    thread blocks forever waiting for a JS response that can never arrive
-    (no timeout in pywebview's own implementation) — the process then hangs
-    in threading._shutdown() forever, waiting on this exact thread, which
-    LOOKS like the same close deadlock already fixed but is a different bug
-    one level up: the replay loop itself didn't know the window was gone.
-    Checked here, not just in the caller's loop, so every push() call site
-    (recognition, hints, the reveal-loop) is covered by one guard.
+    the same window. See _safe_evaluate_js for what `closing` actually
+    protects against.
     """
     if closing is not None and closing.is_set():
         return pending
     if push is None:
-        push = lambda: None if (closing is not None and closing.is_set()) else window.evaluate_js(
-            f"renderMeeting({_state_json(meeting, agenda, alarm_task)})"
+        push = lambda: _safe_evaluate_js(
+            window, f"renderMeeting({_state_json(meeting, agenda, alarm_task)})", closing
         )
 
     results = match(text, agenda)
@@ -188,8 +205,7 @@ def _run_replay(window, loaded_event, closing=None):
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
-        if closing is None or not closing.is_set():
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        _safe_evaluate_js(window, f"renderMeeting({_state_json(meeting, agenda, alarm_task)})", closing)
         time.sleep(2)
         meeting.phase = "live"
 
@@ -208,18 +224,14 @@ def _run_replay(window, loaded_event, closing=None):
             )
 
         meeting.phase = "after"
-        if closing is None or not closing.is_set():
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        _safe_evaluate_js(window, f"renderMeeting({_state_json(meeting, agenda, alarm_task)})", closing)
     except Exception as e:
         print(f"second screen replay failed: {e}", file=sys.stderr)
-        if closing is not None and closing.is_set():
-            return
-        try:
-            window.evaluate_js(
-                f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
-            )
-        except Exception:
-            pass
+        _safe_evaluate_js(
+            window,
+            f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}",
+            closing,
+        )
 
 
 def _run_live(window, loaded_event, closing=None):
@@ -243,8 +255,7 @@ def _run_live(window, loaded_event, closing=None):
         speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")
 
         meeting = Meeting(phase="live", remaining_count=len(agenda))
-        if closing is None or not closing.is_set():
-            window.evaluate_js(f"renderMeeting({_state_json(meeting, agenda, alarm_task)})")
+        _safe_evaluate_js(window, f"renderMeeting({_state_json(meeting, agenda, alarm_task)})", closing)
 
         state = {"pending": None}
         lock = threading.Lock()
@@ -294,14 +305,11 @@ def _run_live(window, loaded_event, closing=None):
         print("Живой микрофон запущен — говорите; закройте окно, чтобы остановить.")
     except Exception as e:
         print(f"live run failed: {e}", file=sys.stderr)
-        if closing is not None and closing.is_set():
-            return
-        try:
-            window.evaluate_js(
-                f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}"
-            )
-        except Exception:
-            pass
+        _safe_evaluate_js(
+            window,
+            f"document.getElementById('heard-lines').innerHTML = {json.dumps(f'<p>Ошибка: {e}</p>')}",
+            closing,
+        )
 
 
 if __name__ == "__main__":
