@@ -21,7 +21,7 @@ from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from live_audio import LiveAudioSession, build_additional_vocab
 from meeting import Meeting
-from recap import build_overview, build_recap, latest_recap, save_recap
+from recap import build_overview, build_recap, list_recaps, read_recap, save_recap
 from run_polosa_replay import _state_json as _polosa_state_json
 from run_second_screen import LLM_KEY_PATH, SPEECHMATICS_KEY_PATH, TEAM, _WORD_RE, _process_turn, _safe_evaluate_js
 from run_second_screen import _state_json as _rich_state_json
@@ -169,17 +169,6 @@ if __name__ == "__main__":
     window.events.loaded += loaded_event.set
     closing_event = threading.Event()
 
-    # Only second_screen.html has the recap-panel markup/JS (renderRecap) —
-    # captured here, before switch_layout, so both it and the startup block
-    # below can push into whichever window instance is live at the time.
-    prior_recap = latest_recap()
-
-    def _push_recap_if_second_screen(key):
-        if key == "second_screen" and prior_recap is not None:
-            _safe_evaluate_js(
-                window, f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})", closing_event
-            )
-
     def switch_layout(key):
         """Runs on the main thread (tray click handler) — resize/load_url
         are safe to call synchronously here (see menubar.start_layout_tray's
@@ -202,7 +191,6 @@ if __name__ == "__main__":
                     key, window, session_ref["meeting"], session_ref["agenda"], session_ref["alarm_task"],
                     closing=closing_event,
                 )
-                _push_recap_if_second_screen(key)
 
         threading.Thread(target=_wait_and_push, daemon=True).start()
 
@@ -240,7 +228,14 @@ if __name__ == "__main__":
 
         menubar.defer(0.15, _do_close)
 
-    window.expose(minimize_window, close_window)
+    # Picker for past dailies — the page itself pulls this via
+    # pywebview.api.list_recaps()/read_recap() on its own load event (see
+    # second_screen.html's loadRecapList()); a layout switch back to
+    # second_screen.html reloads the page, which re-triggers that same load
+    # event, so no Python-side push is needed here either. Only
+    # second_screen.html has the picker markup — column.html/polosa.html
+    # simply never call it.
+    window.expose(minimize_window, close_window, list_recaps, read_recap)
 
     # Live by default, not opt-in — unlike the three standalone run_*.py
     # (still --live-opt-in, meant for trying things out/debugging from a
@@ -252,15 +247,6 @@ if __name__ == "__main__":
     # anyone not launching from a terminal. --demo is the explicit opt-out
     # for testing/demoing without a microphone.
     is_live = "--demo" not in sys.argv
-    if is_live and prior_recap is not None:
-        # DEFAULT_LAYOUT is "second_screen", so this is safe at startup —
-        # switch_layout's own _push_recap_if_second_screen handles it if the
-        # user later switches away and back.
-        def _show_recap():
-            loaded_event.wait(timeout=10)
-            _push_recap_if_second_screen(state_ref["layout"])
-
-        threading.Thread(target=_show_recap, daemon=True).start()
 
     target = _run_live if is_live else _run_replay
     webview.start(target, (window, loaded_event, state_ref, session_ref, closing_event))

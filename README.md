@@ -304,15 +304,19 @@ a real sprint before this is more than "should work."
 
 On closing a `--live` window, the app builds a short recap of what was
 discussed and saves it to `recaps/*.json` (gitignored — real transcript
-content, this repo is public). On the next `--live` launch, if a saved
-recap exists, "Второй экран" shows it immediately in a panel at the bottom
-of the "Слышу" column — closable with its own × without touching the rest
-of the screen, and reopenable any time from the ↺ button next to the
-window's theme/minimize/close controls (top-right). Only "Второй экран" has
-this panel — "Полоса" and "Колонка" don't render it, and switching to
-`Дейлик.app`'s unified layout picker and back re-shows it (the meeting
-itself never restarts on a layout switch, only what's loaded in the window
-changes — same as everything else `_push_state` re-sends).
+content, this repo is public). "Второй экран" shows a **picker**, not just
+the single latest one — Granola/Fireflies-style browsing by date: a
+scrollable list of past dailies at the top of the panel (bottom of the
+"Слышу" column), clicking any date loads and shows its content below. The
+page pulls this itself — `pywebview.api.list_recaps()`/`read_recap()`
+exposed from Python (`recap.list_recaps()`/`read_recap()`), called from
+`second_screen.html`'s `loadRecapList()` on its own `pywebviewready` event —
+there's no Python-side push anymore, so a layout switch back to "Второй
+экран" (which reloads the page) re-triggers the same load event and
+refreshes the list on its own. The panel is closable with its own × without
+touching the rest of the screen, and reopenable any time from the ↺ button
+next to the window's theme/minimize/close controls (top-right). Only
+"Второй экран" has this panel — "Полоса" and "Колонка" don't render it.
 
 The recap has two parts, stacked in the panel:
 
@@ -339,8 +343,8 @@ The recap has two parts, stacked in the panel:
   full-task summary needs everything, not just the last 90s of it).
 
 A recap is only saved if at least one of the two parts has content
-(`if records or overview`) — a daily where literally nothing was said
-saves nothing, same as before.
+(`if records or overview["gist"] or overview["topics"]`) — a daily where
+literally nothing was said saves nothing.
 
 Generation runs in a non-daemon background thread on window close: the
 window closes immediately, but the process itself stays alive a few extra

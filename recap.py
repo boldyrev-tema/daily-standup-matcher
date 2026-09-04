@@ -147,11 +147,35 @@ def save_recap(records: list[dict], overview: dict | None = None, dir: str = REC
     return path
 
 
-def latest_recap(dir: str = RECAPS_DIR) -> dict | None:
+def _format_recap_label(filename: str) -> str:
+    stem = filename[:-len(".json")] if filename.endswith(".json") else filename
+    try:
+        date_part, _, time_part = stem.partition("_")
+        hh, mm, _ss = time_part.split("-")
+        return f"{date_part} {hh}:{mm}"
+    except ValueError:
+        return stem
+
+
+def list_recaps(dir: str = RECAPS_DIR) -> list[dict]:
+    """All saved recaps, newest first — [{"filename", "label"}], for the
+    picker in second_screen.html's panel (Granola/Fireflies-style: browse
+    past dailies by date, not just the single most recent one)."""
     if not os.path.isdir(dir):
+        return []
+    files = sorted((f for f in os.listdir(dir) if f.endswith(".json")), reverse=True)
+    return [{"filename": f, "label": _format_recap_label(f)} for f in files]
+
+
+def read_recap(filename: str, dir: str = RECAPS_DIR) -> dict | None:
+    """One recap by filename, as picked from list_recaps(). Path-traversal
+    guarded the same way meeting_copilot's live_copilot_poc read_summary()
+    is — filename comes from the JS/pywebview bridge, never trust it as a
+    bare path component."""
+    if not filename or "/" in filename or "\\" in filename or filename in (".", ".."):
         return None
-    files = sorted(f for f in os.listdir(dir) if f.endswith(".json"))
-    if not files:
+    path = os.path.join(dir, filename)
+    if not os.path.isfile(path):
         return None
-    with open(os.path.join(dir, files[-1]), encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)

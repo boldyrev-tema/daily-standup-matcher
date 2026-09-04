@@ -14,7 +14,7 @@ from hints import get_hints
 from live_audio import LiveAudioSession, build_additional_vocab
 from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
-from recap import build_overview, build_recap, latest_recap, save_recap
+from recap import build_overview, build_recap, list_recaps, read_recap, save_recap
 from sprint_snapshot import Task, load_current_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
@@ -380,27 +380,16 @@ if __name__ == "__main__":
 
         menubar.defer(0.15, _do_close)
 
-    window.expose(minimize_window, close_window)
+    # Picker for past dailies (Granola/Fireflies-style: browse by date, not
+    # just the single most recent one) — the page itself pulls this via
+    # pywebview.api.list_recaps()/read_recap() on its own load event (see
+    # second_screen.html's loadRecapList()), no Python-side push needed.
+    # Exposed regardless of --live/--demo — browsing past real recaps
+    # doesn't depend on how THIS run started.
+    window.expose(minimize_window, close_window, list_recaps, read_recap)
     loaded_event = threading.Event()
     window.events.loaded += loaded_event.set
 
     is_live = "--live" in sys.argv
-    if is_live:
-        prior_recap = latest_recap()
-        if prior_recap is not None:
-            # Embedded in second_screen.html itself now (bottom of the
-            # "Слышу" column, toggle button top-left) — no separate window,
-            # see second_screen.html's renderRecap(). Same loaded_event the
-            # main window already waits on elsewhere in this file.
-            def _show_recap():
-                loaded_event.wait(timeout=10)
-                _safe_evaluate_js(
-                    window,
-                    f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})",
-                    closing_event,
-                )
-
-            threading.Thread(target=_show_recap, daemon=True).start()
-
     target = _run_live if is_live else _run_replay
     webview.start(target, (window, loaded_event, closing_event))

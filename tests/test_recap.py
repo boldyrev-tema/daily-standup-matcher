@@ -7,7 +7,7 @@ import requests
 
 from meeting import Line, Meeting
 from sprint_snapshot import Task
-from recap import build_overview, build_recap, save_recap, latest_recap
+from recap import build_overview, build_recap, save_recap, list_recaps, read_recap
 
 TASK_A = Task(
     key="NOVA-1", title="Дубли платежей", assignee="Дарья",
@@ -174,20 +174,38 @@ def test_build_overview_returns_empty_overview_when_all_models_fail(mock_post):
     assert build_overview(meeting, api_key="fake") == {"gist": "", "topics": []}
 
 
-def test_latest_recap_returns_none_when_dir_missing(tmp_path):
-    assert latest_recap(dir=str(tmp_path / "nope")) is None
+def test_list_recaps_returns_empty_list_when_dir_missing(tmp_path):
+    assert list_recaps(dir=str(tmp_path / "nope")) == []
 
 
-def test_latest_recap_returns_none_when_dir_empty(tmp_path):
-    assert latest_recap(dir=str(tmp_path)) is None
+def test_list_recaps_returns_empty_list_when_dir_empty(tmp_path):
+    assert list_recaps(dir=str(tmp_path)) == []
 
 
-def test_latest_recap_returns_most_recent_file(tmp_path):
-    with open(tmp_path / "2026-09-01_10-00-00.json", "w", encoding="utf-8") as f:
-        json.dump({"generated_at": "2026-09-01T10:00:00+00:00",
-                    "tasks": [{"key": "OLD", "title": "Old", "said": ["x"]}]}, f)
-    with open(tmp_path / "2026-09-02_10-00-00.json", "w", encoding="utf-8") as f:
-        json.dump({"generated_at": "2026-09-02T10:00:00+00:00",
-                    "tasks": [{"key": "NEW", "title": "New", "said": ["y"]}]}, f)
-    result = latest_recap(dir=str(tmp_path))
-    assert result["tasks"][0]["key"] == "NEW"
+def test_list_recaps_returns_newest_first_with_readable_labels(tmp_path):
+    (tmp_path / "2026-09-01_10-00-00.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "2026-09-02_11-30-00.json").write_text("{}", encoding="utf-8")
+    result = list_recaps(dir=str(tmp_path))
+    assert result == [
+        {"filename": "2026-09-02_11-30-00.json", "label": "2026-09-02 11:30"},
+        {"filename": "2026-09-01_10-00-00.json", "label": "2026-09-01 10:00"},
+    ]
+
+
+def test_read_recap_returns_file_contents(tmp_path):
+    data = {"generated_at": "2026-09-02T10:00:00+00:00",
+            "overview": {"gist": "g", "topics": []},
+            "tasks": [{"key": "NEW", "title": "New", "said": ["y"]}]}
+    (tmp_path / "2026-09-02_10-00-00.json").write_text(json.dumps(data), encoding="utf-8")
+    result = read_recap("2026-09-02_10-00-00.json", dir=str(tmp_path))
+    assert result == data
+
+
+def test_read_recap_returns_none_for_missing_file(tmp_path):
+    assert read_recap("nope.json", dir=str(tmp_path)) is None
+
+
+def test_read_recap_rejects_path_traversal(tmp_path):
+    (tmp_path.parent / "secret.json").write_text("{}", encoding="utf-8")
+    assert read_recap("../secret.json", dir=str(tmp_path)) is None
+    assert read_recap("/etc/passwd", dir=str(tmp_path)) is None

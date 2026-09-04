@@ -138,7 +138,7 @@
 
   .recap-panel {
     flex-shrink: 0; border-top: 1px solid var(--line);
-    padding: 12px 20px 16px; max-height: 240px;
+    padding: 12px 20px 16px; max-height: 320px;
     display: flex; flex-direction: column; min-height: 0;
   }
   .recap-panel-header {
@@ -152,6 +152,19 @@
     display: flex; align-items: center; justify-content: center;
   }
   .recap-panel-header button:hover { background: var(--control-hover); color: var(--ink); }
+  #recap-list {
+    flex-shrink: 0; max-height: 84px; overflow-y: auto;
+    margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  }
+  .recap-list-item {
+    font-size: 12px; color: var(--dim); padding: 3px 0; cursor: pointer;
+  }
+  .recap-list-item:hover { color: var(--ink); }
+  .recap-list-item.active { color: var(--accent-text); font-weight: 600; }
+  .recap-list-empty { font-size: 12px; color: var(--dim); }
+  .recap-content-date {
+    font-size: 11px; color: var(--dim); margin-bottom: 8px; flex-shrink: 0;
+  }
   #recap-panel-body { overflow-y: auto; min-height: 0; }
   .recap-overview {
     margin-bottom: 14px; padding-bottom: 12px;
@@ -196,9 +209,11 @@
       <div id="heard-lines"></div>
       <div class="recap-panel" id="recap-panel" style="display:none">
         <div class="recap-panel-header">
-          <span class="section-label" id="recap-panel-title">Прошлый дейлик</span>
-          <button id="recap-close-btn" title="Закрыть" aria-label="Закрыть прошлый дейлик">×</button>
+          <span class="section-label">Прошлые дейлики</span>
+          <button id="recap-close-btn" title="Закрыть" aria-label="Закрыть прошлые дейлики">×</button>
         </div>
+        <div id="recap-list"></div>
+        <div id="recap-content-date" class="recap-content-date"></div>
         <div id="recap-panel-body"></div>
       </div>
     </div>
@@ -367,11 +382,14 @@ function renderMeeting(state) {
 
 window.renderMeeting = renderMeeting;
 
-function renderRecap(data) {
+let currentRecapFilename = null;
+
+function renderRecapContent(data) {
   const dt = new Date(data.generated_at);
   const dateLabel = dt.toLocaleDateString("ru-RU") + " " +
     dt.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
-  document.getElementById("recap-panel-title").textContent = "Прошлый дейлик — " + dateLabel;
+  document.getElementById("recap-content-date").textContent = dateLabel;
+
   const body = document.getElementById("recap-panel-body");
   body.innerHTML = "";
   const gist = data.overview && data.overview.gist;
@@ -399,7 +417,7 @@ function renderRecap(data) {
     }
     body.appendChild(overview);
   }
-  data.tasks.forEach(task => {
+  (data.tasks || []).forEach(task => {
     const div = document.createElement("div");
     div.className = "recap-task";
     const title = document.createElement("div");
@@ -414,10 +432,50 @@ function renderRecap(data) {
     });
     body.appendChild(div);
   });
-  document.getElementById("recap-btn").style.display = "flex";
-  document.getElementById("recap-panel").style.display = "flex";
 }
-window.renderRecap = renderRecap;
+
+function renderRecapList(files) {
+  const list = document.getElementById("recap-list");
+  list.innerHTML = "";
+  if (!files || files.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "recap-list-empty";
+    empty.textContent = "пока нет прошлых дейликов";
+    list.appendChild(empty);
+    return;
+  }
+  files.forEach(f => {
+    const item = document.createElement("div");
+    item.className = "recap-list-item" + (f.filename === currentRecapFilename ? " active" : "");
+    item.textContent = f.label;
+    item.dataset.filename = f.filename;
+    item.onclick = () => loadRecap(f.filename);
+    list.appendChild(item);
+  });
+}
+
+function loadRecap(filename) {
+  pywebview.api.read_recap(filename).then(data => {
+    if (!data) return;
+    currentRecapFilename = filename;
+    renderRecapContent(data);
+    document.querySelectorAll("#recap-list .recap-list-item").forEach(el => {
+      el.classList.toggle("active", el.dataset.filename === filename);
+    });
+  });
+}
+
+function loadRecapList() {
+  pywebview.api.list_recaps().then(files => {
+    renderRecapList(files);
+    if (files && files.length > 0) {
+      loadRecap(files[0].filename);
+      document.getElementById("recap-btn").style.display = "flex";
+      document.getElementById("recap-panel").style.display = "flex";
+    }
+  });
+}
+window.addEventListener("pywebviewready", loadRecapList);
 
 document.getElementById("recap-btn").addEventListener("click", () => {
   document.getElementById("recap-panel").style.display = "flex";
