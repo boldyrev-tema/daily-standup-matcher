@@ -7,6 +7,8 @@ outside reason the Dock icon persisted — see the project memory entry dated
 
 Build: venv/bin/python3.14 setup_column.py py2app
 """
+import os
+
 from setuptools import setup
 
 APP = ["run_column.py"]
@@ -14,6 +16,9 @@ DATA_FILES = [
     "column.html",
     ("fixtures", ["fixtures/sprint.json", "fixtures/sample_daily_transcript.json"]),
 ]
+# Bundled only if present locally — see setup_app.py's comment for why.
+if os.path.exists("bin/SystemAudioDump"):
+    DATA_FILES.append(("bin", ["bin/SystemAudioDump"]))
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": None,

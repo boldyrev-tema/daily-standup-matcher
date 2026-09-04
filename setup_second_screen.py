@@ -4,6 +4,8 @@ py2app, and why each `packages` entry below is needed).
 
 Build: venv/bin/python3.14 setup_second_screen.py py2app
 """
+import os
+
 from setuptools import setup
 
 APP = ["run_second_screen.py"]
@@ -11,6 +13,9 @@ DATA_FILES = [
     "second_screen.html",
     ("fixtures", ["fixtures/sprint.json", "fixtures/sample_daily_transcript.json"]),
 ]
+# Bundled only if present locally — see setup_app.py's comment for why.
+if os.path.exists("bin/SystemAudioDump"):
+    DATA_FILES.append(("bin", ["bin/SystemAudioDump"]))
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": None,

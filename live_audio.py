@@ -59,7 +59,13 @@ def build_additional_vocab(agenda: list[Task]) -> list[dict]:
 # still overrides this if set, for a copy kept somewhere else. Without
 # either, only the microphone channel ("Ты") runs, same graceful
 # degradation as the PoC.
-_DEFAULT_SYSTEM_AUDIO_DUMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "SystemAudioDump")
+# Plain relative path, not __file__-derived — same convention as
+# "fixtures/sprint.json" elsewhere in this codebase, which already relies
+# on cwd being the project root when run from source and py2app's Resources
+# dir inside a packaged .app (proven working there already). A __file__-
+# based path would resolve inside py2app's zipped module archive instead,
+# not the Resources dir where DATA_FILES actually land.
+_DEFAULT_SYSTEM_AUDIO_DUMP = os.path.join("bin", "SystemAudioDump")
 
 MIC_SAMPLE_RATE = 16000
 SYS_SAMPLE_RATE = 24000  # SystemAudioDump's native output rate
