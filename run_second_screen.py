@@ -375,30 +375,17 @@ if __name__ == "__main__":
     if is_live:
         prior_recap = latest_recap()
         if prior_recap is not None:
-            recap_window = webview.create_window(
-                "Прошлый дейлик",
-                "recap.html",
-                width=380,
-                height=500,
-                x=1160,
-                y=40,
-                frameless=True,
-                on_top=True,
-                transparent=True,
-            )
-
-            def close_recap_window():
-                # Same fix as the main window's close_window — see its
-                # comment for why a bare thread isn't enough.
-                menubar.defer(0.15, recap_window.destroy)
-
-            recap_window.expose(close_recap_window)
-            recap_loaded_event = threading.Event()
-            recap_window.events.loaded += recap_loaded_event.set
-
+            # Embedded in second_screen.html itself now (bottom of the
+            # "Слышу" column, toggle button top-left) — no separate window,
+            # see second_screen.html's renderRecap(). Same loaded_event the
+            # main window already waits on elsewhere in this file.
             def _show_recap():
-                recap_loaded_event.wait(timeout=10)
-                recap_window.evaluate_js(f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})")
+                loaded_event.wait(timeout=10)
+                _safe_evaluate_js(
+                    window,
+                    f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})",
+                    closing_event,
+                )
 
             threading.Thread(target=_show_recap, daemon=True).start()
 

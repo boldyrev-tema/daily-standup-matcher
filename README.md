@@ -128,8 +128,8 @@ venv/bin/python3 -m pytest -v
   See `docs/superpowers/specs/2026-08-30-column-design.md`.
 
 - `recap.py` — builds/saves/loads the post-daily recap, see "Post-daily
-  recap" below.
-- `recap.html` — the small standalone window that shows a saved recap.
+  recap" below. The panel that renders it lives inside `second_screen.html`
+  itself, not a separate file.
 - `menubar.py` — menu-bar (macOS status bar) icon, replaces Dock-based
   minimize now that the app is hidden from the Dock. `start_tray()` (plain
   Показать/Скрыть + Выход, used by the three standalone `run_*.py`) and
@@ -300,13 +300,19 @@ to test with, so this is built and tested against mocked responses only
 Needs someone to actually set the credentials file and run it once against
 a real sprint before this is more than "should work."
 
-## Post-daily recap (`recap.py` + `recap.html`)
+## Post-daily recap (`recap.py`, rendered inline in `second_screen.html`)
 
 On closing a `--live` window, the app builds a short recap of what was
 discussed per task and saves it to `recaps/*.json` (gitignored — real
 transcript content, this repo is public). On the next `--live` launch, if a
-saved recap exists, a small separate window opens next to the main one
-showing it.
+saved recap exists, "Второй экран" shows it immediately in a panel at the
+bottom of the "Слышу" column — closable with its own × without touching the
+rest of the screen, and reopenable any time from the 🕘 button next to the
+window's theme/minimize/close controls (top-left). Only "Второй экран" has
+this panel — "Полоса" and "Колонка" don't render it, and switching to
+`Дейлик.app`'s unified layout picker and back re-shows it (the meeting
+itself never restarts on a layout switch, only what's loaded in the window
+changes — same as everything else `_push_state` re-sends).
 
 The matcher only tags the ONE utterance that actually triggered task
 recognition (`Line.task`) — the rest of a task's discussion (clarifications,

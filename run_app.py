@@ -168,6 +168,17 @@ if __name__ == "__main__":
     window.events.loaded += loaded_event.set
     closing_event = threading.Event()
 
+    # Only second_screen.html has the recap-panel markup/JS (renderRecap) —
+    # captured here, before switch_layout, so both it and the startup block
+    # below can push into whichever window instance is live at the time.
+    prior_recap = latest_recap()
+
+    def _push_recap_if_second_screen(key):
+        if key == "second_screen" and prior_recap is not None:
+            _safe_evaluate_js(
+                window, f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})", closing_event
+            )
+
     def switch_layout(key):
         """Runs on the main thread (tray click handler) — resize/load_url
         are safe to call synchronously here (see menubar.start_layout_tray's
@@ -190,6 +201,7 @@ if __name__ == "__main__":
                     key, window, session_ref["meeting"], session_ref["agenda"], session_ref["alarm_task"],
                     closing=closing_event,
                 )
+                _push_recap_if_second_screen(key)
 
         threading.Thread(target=_wait_and_push, daemon=True).start()
 
@@ -227,33 +239,15 @@ if __name__ == "__main__":
     # anyone not launching from a terminal. --demo is the explicit opt-out
     # for testing/demoing without a microphone.
     is_live = "--demo" not in sys.argv
-    if is_live:
-        prior_recap = latest_recap()
-        if prior_recap is not None:
-            recap_window = webview.create_window(
-                "Прошлый дейлик",
-                "recap.html",
-                width=380,
-                height=500,
-                x=1160,
-                y=40,
-                frameless=True,
-                on_top=True,
-                transparent=True,
-            )
+    if is_live and prior_recap is not None:
+        # DEFAULT_LAYOUT is "second_screen", so this is safe at startup —
+        # switch_layout's own _push_recap_if_second_screen handles it if the
+        # user later switches away and back.
+        def _show_recap():
+            loaded_event.wait(timeout=10)
+            _push_recap_if_second_screen(state_ref["layout"])
 
-            def close_recap_window():
-                menubar.defer(0.15, recap_window.destroy)
-
-            recap_window.expose(close_recap_window)
-            recap_loaded_event = threading.Event()
-            recap_window.events.loaded += recap_loaded_event.set
-
-            def _show_recap():
-                recap_loaded_event.wait(timeout=10)
-                recap_window.evaluate_js(f"renderRecap({json.dumps(prior_recap, ensure_ascii=False)})")
-
-            threading.Thread(target=_show_recap, daemon=True).start()
+        threading.Thread(target=_show_recap, daemon=True).start()
 
     target = _run_live if is_live else _run_replay
     webview.start(target, (window, loaded_event, state_ref, session_ref, closing_event))

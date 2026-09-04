@@ -135,10 +135,37 @@
   .window-controls button:hover { background: var(--control-hover); color: var(--ink); }
   .window-controls button:active { transform: scale(.92); }
   #theme-btn { font-size: 12px; }
+
+  .recap-panel {
+    flex-shrink: 0; border-top: 1px solid var(--line);
+    padding: 12px 20px 16px; max-height: 240px;
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .recap-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0; margin-bottom: 8px;
+  }
+  .recap-panel-header button {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--control-bg); border: none; color: var(--dim);
+    font-size: 13px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .recap-panel-header button:hover { background: var(--control-hover); color: var(--ink); }
+  #recap-panel-body { overflow-y: auto; min-height: 0; }
+  .recap-task { margin-bottom: 12px; }
+  .recap-task:last-child { margin-bottom: 0; }
+  .recap-task-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .recap-said-line {
+    font-size: 12px; line-height: 1.4; color: var(--dim);
+    margin: 0 0 3px 0; padding-left: 12px; position: relative;
+  }
+  .recap-said-line::before { content: "–"; position: absolute; left: 0; }
 </style>
 </head>
 <body>
   <div class="window-controls">
+    <button id="recap-btn" title="Прошлый дейлик" aria-label="Показать прошлый дейлик" style="display:none;">🕘</button>
     <button id="theme-btn" title="Сменить тему" aria-label="Сменить тему">🌙</button>
     <button id="minimize-btn" title="Свернуть" aria-label="Свернуть окно">–</button>
     <button id="close-btn" title="Закрыть" aria-label="Закрыть окно">×</button>
@@ -150,6 +177,13 @@
         <span class="section-label">Слышу</span>
       </div>
       <div id="heard-lines"></div>
+      <div class="recap-panel" id="recap-panel" style="display:none">
+        <div class="recap-panel-header">
+          <span class="section-label" id="recap-panel-title">Прошлый дейлик</span>
+          <button id="recap-close-btn" title="Закрыть" aria-label="Закрыть прошлый дейлик">×</button>
+        </div>
+        <div id="recap-panel-body"></div>
+      </div>
     </div>
     <div class="col col-recorded">
       <div class="col-header"><span class="section-label">Записал</span></div>
@@ -315,6 +349,40 @@ function renderMeeting(state) {
 }
 
 window.renderMeeting = renderMeeting;
+
+function renderRecap(data) {
+  const dt = new Date(data.generated_at);
+  const dateLabel = dt.toLocaleDateString("ru-RU") + " " +
+    dt.toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
+  document.getElementById("recap-panel-title").textContent = "Прошлый дейлик — " + dateLabel;
+  const body = document.getElementById("recap-panel-body");
+  body.innerHTML = "";
+  data.tasks.forEach(task => {
+    const div = document.createElement("div");
+    div.className = "recap-task";
+    const title = document.createElement("div");
+    title.className = "recap-task-title";
+    title.textContent = task.title;
+    div.appendChild(title);
+    task.said.forEach(line => {
+      const p = document.createElement("p");
+      p.className = "recap-said-line";
+      p.textContent = line;
+      div.appendChild(p);
+    });
+    body.appendChild(div);
+  });
+  document.getElementById("recap-btn").style.display = "flex";
+  document.getElementById("recap-panel").style.display = "flex";
+}
+window.renderRecap = renderRecap;
+
+document.getElementById("recap-btn").addEventListener("click", () => {
+  document.getElementById("recap-panel").style.display = "flex";
+});
+document.getElementById("recap-close-btn").addEventListener("click", () => {
+  document.getElementById("recap-panel").style.display = "none";
+});
 
 document.getElementById("minimize-btn").addEventListener("click", () => {
   if (window.pywebview && window.pywebview.api) {

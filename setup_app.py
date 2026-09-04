@@ -4,9 +4,9 @@ choice of layout inside the product. Same recipe proven on setup_column.py
 entry below is needed).
 
 Unlike the three single-layout setup_*.py scripts, this one bundles all
-three HTML templates plus recap.html — the unified app can end up on any
-layout, and --live pulls in the recap window like run_second_screen.py's
-own build already does.
+three HTML templates — the unified app can end up on any layout. The
+post-daily recap is rendered inline inside second_screen.html itself (no
+separate template to bundle), same as run_second_screen.py's own build.
 
 Build: venv/bin/python3.14 make_app_icon.py && venv/bin/python3.14 setup_app.py py2app
 """
@@ -22,7 +22,6 @@ DATA_FILES = [
     "second_screen.html",
     "column.html",
     "polosa.html",
-    "recap.html",
     ("fixtures", ["fixtures/sprint.json", "fixtures/sample_daily_transcript.json"]),
 ]
 OPTIONS = {

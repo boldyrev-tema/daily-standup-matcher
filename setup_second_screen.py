@@ -9,7 +9,6 @@ from setuptools import setup
 APP = ["run_second_screen.py"]
 DATA_FILES = [
     "second_screen.html",
-    "recap.html",
     ("fixtures", ["fixtures/sprint.json", "fixtures/sample_daily_transcript.json"]),
 ]
 OPTIONS = {
