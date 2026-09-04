@@ -52,14 +52,20 @@ def build_additional_vocab(agenda: list[Task]) -> list[dict]:
 # finalized (speaker, text) turns exactly like this module produces them.
 #
 # System audio ("Собеседник", the other side of the call) needs the
-# SystemAudioDump binary from the cheating-daddy project — NOT bundled here
-# (this repo is public; that binary's license isn't ours to redistribute).
-# Point SYSTEM_AUDIO_DUMP_PATH at a local copy to enable it; without it, only
-# the microphone channel ("Ты") runs, same graceful degradation as the PoC.
+# SystemAudioDump binary from the cheating-daddy project — NOT committed
+# here (this repo is public; that binary's license isn't ours to
+# redistribute), but a local copy at bin/SystemAudioDump (gitignored) is
+# picked up automatically if present, no env var needed. SYSTEM_AUDIO_DUMP_PATH
+# still overrides this if set, for a copy kept somewhere else. Without
+# either, only the microphone channel ("Ты") runs, same graceful
+# degradation as the PoC.
+_DEFAULT_SYSTEM_AUDIO_DUMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "SystemAudioDump")
 
 MIC_SAMPLE_RATE = 16000
 SYS_SAMPLE_RATE = 24000  # SystemAudioDump's native output rate
-SYSTEM_AUDIO_DUMP_PATH = os.environ.get("SYSTEM_AUDIO_DUMP_PATH", "")
+SYSTEM_AUDIO_DUMP_PATH = os.environ.get("SYSTEM_AUDIO_DUMP_PATH") or (
+    _DEFAULT_SYSTEM_AUDIO_DUMP if os.path.exists(_DEFAULT_SYSTEM_AUDIO_DUMP) else ""
+)
 
 # Real hardware self-noise is never bit-exact zero across a whole buffer —
 # only a blocked/unnegotiated audio path (e.g. AirPods stuck outside HFP

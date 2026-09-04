@@ -239,10 +239,12 @@ current agenda's task titles (`live_audio.build_additional_vocab()`, words
 product names/jargon this sprint uses instead of a generic model's guess.
 
 System audio (the other side of the call, labeled "Собеседник") needs the
-`SystemAudioDump` binary from the `cheating-daddy` project — **not bundled
-here** (this repo is public; that binary's license isn't ours to
-redistribute). Point the `SYSTEM_AUDIO_DUMP_PATH` env var at a local copy to
-enable it; without it, only the microphone channel ("Ты") runs.
+`SystemAudioDump` binary from the `cheating-daddy` project — **not
+committed here** (this repo is public; that binary's license isn't ours to
+redistribute), but if you drop a local copy at `bin/SystemAudioDump`
+(gitignored) it's picked up automatically, no env var needed. The
+`SYSTEM_AUDIO_DUMP_PATH` env var still overrides this if you keep your copy
+somewhere else. Without either, only the microphone channel ("Ты") runs.
 
 `--live` is opt-in — `python3 run_second_screen.py` (no flag) still runs the
 deterministic file replay, unchanged, for demos/tests.
