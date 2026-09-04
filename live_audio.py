@@ -52,12 +52,11 @@ def build_additional_vocab(agenda: list[Task]) -> list[dict]:
 # finalized (speaker, text) turns exactly like this module produces them.
 #
 # System audio ("Собеседник", the other side of the call) needs the
-# SystemAudioDump binary from the cheating-daddy project — NOT committed
-# here (this repo is public; that binary's license isn't ours to
-# redistribute), but a local copy at bin/SystemAudioDump (gitignored) is
-# picked up automatically if present, no env var needed. SYSTEM_AUDIO_DUMP_PATH
-# still overrides this if set, for a copy kept somewhere else. Without
-# either, only the microphone channel ("Ты") runs, same graceful
+# SystemAudioDump binary from the cheating-daddy project (GPLv3 — see
+# bin/README.md and bin/LICENSE for attribution) — bundled at
+# bin/SystemAudioDump, picked up automatically. SYSTEM_AUDIO_DUMP_PATH still
+# overrides this if a different copy is kept elsewhere. Without either
+# (e.g. non-macOS), only the microphone channel ("Ты") runs, same graceful
 # degradation as the PoC.
 # Plain relative path, not __file__-derived — same convention as
 # "fixtures/sprint.json" elsewhere in this codebase, which already relies

@@ -24,11 +24,8 @@ DATA_FILES = [
     "polosa.html",
     ("fixtures", ["fixtures/sprint.json", "fixtures/sample_daily_transcript.json"]),
 ]
-# Bundled only if present locally — gitignored, not in the public repo (see
-# live_audio.py's comment: third-party binary, license isn't ours to
-# redistribute). Someone building without their own copy still gets a
-# working build, just mic-only, same graceful degradation as running from
-# source without it.
+# Committed in the repo (GPLv3, see bin/README.md), guarded on existence
+# only so a build still succeeds (mic-only) if someone deletes bin/ locally.
 if os.path.exists("bin/SystemAudioDump"):
     DATA_FILES.append(("bin", ["bin/SystemAudioDump"]))
 OPTIONS = {

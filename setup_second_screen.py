@@ -13,7 +13,8 @@ DATA_FILES = [
     "second_screen.html",
     ("fixtures", ["fixtures/sprint.json", "fixtures/sample_daily_transcript.json"]),
 ]
-# Bundled only if present locally — see setup_app.py's comment for why.
+# Committed in the repo (GPLv3, see bin/README.md), guarded on existence
+# only so a build still succeeds (mic-only) if someone deletes bin/ locally.
 if os.path.exists("bin/SystemAudioDump"):
     DATA_FILES.append(("bin", ["bin/SystemAudioDump"]))
 OPTIONS = {

@@ -239,12 +239,12 @@ current agenda's task titles (`live_audio.build_additional_vocab()`, words
 product names/jargon this sprint uses instead of a generic model's guess.
 
 System audio (the other side of the call, labeled "Собеседник") needs the
-`SystemAudioDump` binary from the `cheating-daddy` project — **not
-committed here** (this repo is public; that binary's license isn't ours to
-redistribute), but if you drop a local copy at `bin/SystemAudioDump`
-(gitignored) it's picked up automatically, no env var needed. The
-`SYSTEM_AUDIO_DUMP_PATH` env var still overrides this if you keep your copy
-somewhere else. Without either, only the microphone channel ("Ты") runs.
+`SystemAudioDump` binary from the `cheating-daddy` project — **bundled
+in this repo** at `bin/SystemAudioDump` (GPLv3, see `bin/README.md`/
+`bin/LICENSE` for attribution and the upstream source link), picked up
+automatically, no env var needed. `SYSTEM_AUDIO_DUMP_PATH` still overrides
+this if you keep a different copy elsewhere. Without either, only the
+microphone channel ("Ты") runs.
 
 `--live` is opt-in — `python3 run_second_screen.py` (no flag) still runs the
 deterministic file replay, unchanged, for demos/tests.
@@ -405,11 +405,10 @@ venv/bin/python3 make_app_icon.py   # writes AppIcon.icns — setup_app.py refus
 venv/bin/python3 setup_app.py py2app
 ```
 
-`dist/`, `build/`, `logs/`, `bin/`, and `AppIcon.icns` are gitignored —
-nothing here is committed, only the scripts that produce/reference them
-(`make_app_icon.py`/`setup_*.py`). If `bin/SystemAudioDump` exists locally
-(see "Live microphone" above), every `setup_*.py` bundles it into the
-built `.app` automatically — no extra step needed. Two native dependencies
+`dist/`, `build/`, `logs/`, and `AppIcon.icns` are gitignored — `bin/` is
+NOT (see "Live microphone" above — `SystemAudioDump` is committed here,
+GPLv3). Every `setup_*.py` bundles it into the built `.app` automatically —
+no extra step needed. Two native dependencies
 needed forcing into `packages` in every `setup_*.py` (py2app's static
 import analysis misses their non-code files otherwise): `pymorphy3_dicts_ru`
 (dictionary data, "Can't find a dictionary for language 'ru'" without it)
