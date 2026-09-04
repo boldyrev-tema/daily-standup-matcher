@@ -22,6 +22,23 @@ MODEL_CHAIN: list[tuple[str, dict]] = [
     ("minimax/minimax-m3:free", {}),
     ("nvidia/nemotron-3-super-120b-a12b:free", {"reasoning": {"enabled": False}}),
 ]
+# Used instead of MODEL_CHAIN when past_said is given (see get_hints). That
+# prompt asks the model to reason about a temporal discrepancy (said X last
+# time, saying Y now), not just extract from today's lines — harder than
+# nano-omni's normal job. Empirically (4 сен, live test, real OpenRouter
+# calls): given the exact same enriched prompt, nano-omni came back with a
+# validly-parsed but WRONG {"said": [], "ask": null} — nothing to extract,
+# supposedly — while minimax-m3 and nemotron-3-super both correctly noticed
+# the discrepancy and asked about it. get_hints() can't retry past a
+# successfully-parsed empty response the way it retries past exceptions
+# (an empty said/ask is often the CORRECT answer for the normal, no-past-
+# context case — small talk, nothing substantive said), so the fix is
+# ordering, not a retry-on-empty rule: skip straight past nano-omni here.
+MODEL_CHAIN_WITH_PAST_CONTEXT: list[tuple[str, dict]] = [
+    ("minimax/minimax-m3:free", {}),
+    ("nvidia/nemotron-3-super-120b-a12b:free", {"reasoning": {"enabled": False}}),
+    ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", {"reasoning": {"enabled": False}}),
+]
 LOOKBACK_SECONDS = 90.0
 
 SYSTEM_PROMPT = (
@@ -122,8 +139,10 @@ def get_hints(
     # Walk the fallback chain instead of retrying the same model — a free
     # model's backend having a bad minute is common enough (see MODEL_CHAIN
     # comment) that a different provider recovers more often than a retry on
-    # the same one.
-    for model, extra in MODEL_CHAIN:
+    # the same one. Different chain/order when past_said is given — see
+    # MODEL_CHAIN_WITH_PAST_CONTEXT's comment for why.
+    chain = MODEL_CHAIN_WITH_PAST_CONTEXT if past_said else MODEL_CHAIN
+    for model, extra in chain:
         payload = {
             "model": model,
             "messages": [
