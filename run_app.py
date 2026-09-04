@@ -219,12 +219,24 @@ if __name__ == "__main__":
         # _push_state's docstring for the full story.
         closing_event.set()
 
-        # Same deadlock-avoidance shape as every other run_*.py's
-        # close_window — see run_second_screen.py's for the full
-        # py-spy-confirmed reasoning.
+        # window.destroy() itself is just AppHelper.callAfter(window.close)
+        # (see webview/platforms/cocoa.py) — it SCHEDULES the close on the
+        # run loop, it doesn't close synchronously. tray_icon.stop() calling
+        # into the SAME shared Cocoa run loop, if it runs FIRST, can stop
+        # that loop before the scheduled window.close ever gets processed —
+        # windowWillClose_ (and therefore events.closed, and everything
+        # wired to it: session.stop, the recap save) then never fires at
+        # all. Real bug, caught live (4 сен) with a temporary print on
+        # events.closed that never fired even though window.destroy() itself
+        # returned normally — the recap had silently never saved once, ever,
+        # since the feature was written. Fix: destroy() first (let the close
+        # actually get scheduled+processed), tray_icon.stop() after, still
+        # deferred (calling it synchronously on the wrong thread was the
+        # ORIGINAL hazard this function already guards against — see git
+        # history for that one).
         def _do_close():
-            tray_icon.stop()
             window.destroy()
+            tray_icon.stop()
 
         menubar.defer(0.15, _do_close)
 

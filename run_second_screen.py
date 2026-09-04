@@ -362,9 +362,21 @@ if __name__ == "__main__":
         # window on a live test (2 сен, real user report: spinning cursor,
         # never closed). Deferred into the same delayed callback as
         # destroy() so it doesn't block this exposed call's own return either.
+        #
+        # Order matters, found live (4 сен): window.destroy() is itself just
+        # AppHelper.callAfter(window.close) (see webview/platforms/cocoa.py)
+        # — it SCHEDULES the close on the run loop rather than closing
+        # synchronously. tray_icon.stop() running FIRST can stop that same
+        # shared run loop before the scheduled close is ever processed, so
+        # windowWillClose_ (and therefore events.closed, and everything
+        # wired to it — session.stop, the recap save) never fires at all.
+        # Confirmed with a temporary print on events.closed that silently
+        # never fired even though window.destroy() itself returned normally
+        # — the recap had never actually saved once, this whole time.
+        # destroy() first, tray_icon.stop() after, fixes it.
         def _do_close():
-            tray_icon.stop()
             window.destroy()
+            tray_icon.stop()
 
         menubar.defer(0.15, _do_close)
 

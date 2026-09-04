@@ -138,9 +138,15 @@ if __name__ == "__main__":
         # synchronously here, for the same reason. See run_second_screen.py's
         # close_window for the live report that caught this (2 сен: spinning
         # cursor, window never closed).
+        #
+        # Order matters too, found live 4 сен (see run_second_screen.py's
+        # close_window for the full story): tray_icon.stop() running before
+        # window.destroy() can stop the shared Cocoa run loop before
+        # destroy()'s own scheduled close (AppHelper.callAfter) ever gets
+        # processed, silently breaking events.closed/session.stop entirely.
         def _do_close():
-            tray_icon.stop()
             window.destroy()
+            tray_icon.stop()
 
         menubar.defer(0.15, _do_close)
 
