@@ -40,7 +40,7 @@ def test_process_turn_recognizes_task_and_fetches_hints(monkeypatch):
     # match -> Meeting/Line bookkeeping -> render -> hints, shared now with
     # the live-mic path (_run_live).
     monkeypatch.setattr(
-        run_second_screen, "get_hints", lambda lines, task, api_key: (["уже сказали"], "спроси про Х")
+        run_second_screen, "get_hints", lambda lines, task, api_key, past_said=None: (["уже сказали"], "спроси про Х")
     )
     agenda = [_task("A-1", "Отчёты — убираем дубли платежей от партнёров")]
     window = _FakeWindow()
@@ -56,6 +56,47 @@ def test_process_turn_recognizes_task_and_fetches_hints(monkeypatch):
     assert meeting.said == ["уже сказали"]
     assert meeting.ask == "спроси про Х"
     assert _wait_until(lambda: window.calls >= 2)  # at least the recognition render + the hints render
+
+
+def test_process_turn_passes_past_said_for_the_recognized_task(monkeypatch):
+    captured = {}
+
+    def fake_get_hints(lines, task, api_key, past_said=None):
+        captured["past_said"] = past_said
+        return (["уже сказали"], None)
+
+    monkeypatch.setattr(run_second_screen, "get_hints", fake_get_hints)
+    agenda = [_task("A-1", "Отчёты — убираем дубли платежей от партнёров")]
+    window = _FakeWindow()
+    meeting = Meeting(phase="live", remaining_count=1)
+    past_recap_tasks = {"A-1": ["вчера обещали закончить сегодня"], "OTHER-1": ["не относится"]}
+
+    _process_turn(
+        "Дарья", "убираем дубли платежей от партнёров", 1.0, agenda, meeting, None, "key", window, None,
+        past_recap_tasks=past_recap_tasks,
+    )
+
+    assert captured["past_said"] == ["вчера обещали закончить сегодня"]
+
+
+def test_process_turn_passes_none_when_task_not_in_past_recap(monkeypatch):
+    captured = {}
+
+    def fake_get_hints(lines, task, api_key, past_said=None):
+        captured["past_said"] = past_said
+        return ([], None)
+
+    monkeypatch.setattr(run_second_screen, "get_hints", fake_get_hints)
+    agenda = [_task("A-1", "Отчёты — убираем дубли платежей от партнёров")]
+    window = _FakeWindow()
+    meeting = Meeting(phase="live", remaining_count=1)
+
+    _process_turn(
+        "Дарья", "убираем дубли платежей от партнёров", 1.0, agenda, meeting, None, "key", window, None,
+        past_recap_tasks={"OTHER-1": ["не относится"]},
+    )
+
+    assert captured["past_said"] is None
 
 
 def test_process_turn_stays_silent_and_sets_pending_on_ambiguous_tie():
@@ -77,7 +118,7 @@ def test_process_turn_stays_silent_and_sets_pending_on_ambiguous_tie():
 
 
 def test_process_turn_backfills_pending_line_via_next_turn(monkeypatch):
-    monkeypatch.setattr(run_second_screen, "get_hints", lambda lines, task, api_key: ([], None))
+    monkeypatch.setattr(run_second_screen, "get_hints", lambda lines, task, api_key, past_said=None: ([], None))
     tasks = [
         _task("B-1", "Выгрузка контактов в старую систему"),
         _task("B-2", "Выгрузка контактов в новую систему"),
@@ -103,7 +144,7 @@ def test_process_turn_uses_custom_push_instead_of_default(monkeypatch):
     # state — locks down that a custom push() fully replaces the default,
     # the window's evaluate_js is never called.
     monkeypatch.setattr(
-        run_second_screen, "get_hints", lambda lines, task, api_key: (["сказали"], "спроси")
+        run_second_screen, "get_hints", lambda lines, task, api_key, past_said=None: (["сказали"], "спроси")
     )
     agenda = [_task("A-1", "Отчёты — убираем дубли платежей от партнёров")]
     window = _FakeWindow()

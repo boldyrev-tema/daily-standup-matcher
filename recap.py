@@ -179,3 +179,18 @@ def read_recap(filename: str, dir: str = RECAPS_DIR) -> dict | None:
         return None
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def latest_recap_tasks_by_key(dir: str = RECAPS_DIR) -> dict[str, list[str]]:
+    """{task_key: said} from the single most recent saved recap — feeds
+    hints.get_hints()'s past_said so the live agent can notice progress (or
+    its absence) against what was said last time, not just re-show it in a
+    picker. Empty dict if there's no prior recap or it recognized no
+    tasks."""
+    files = list_recaps(dir)
+    if not files:
+        return {}
+    data = read_recap(files[0]["filename"], dir)
+    if data is None:
+        return {}
+    return {task["key"]: task["said"] for task in data.get("tasks", [])}

@@ -14,7 +14,7 @@ from hints import get_hints
 from live_audio import LiveAudioSession, build_additional_vocab
 from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
-from recap import build_overview, build_recap, list_recaps, read_recap, save_recap
+from recap import build_overview, build_recap, latest_recap_tasks_by_key, list_recaps, read_recap, save_recap
 from sprint_snapshot import Task, load_current_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
@@ -135,7 +135,10 @@ def _safe_evaluate_js(window, script: str, closing=None) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending, push=None, closing=None):
+def _process_turn(
+    speaker, text, t, agenda, meeting, alarm_task, api_key, window, pending, push=None, closing=None,
+    past_recap_tasks=None,
+):
     """One utterance through the full pipeline: match -> pending-carryover
     resolution -> Meeting/Line bookkeeping -> render -> hints. Shared by the
     file replay (_run_replay) and the live-microphone path (_run_live) so
@@ -149,6 +152,12 @@ def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window
     override this, since it's the only one juggling more than one layout on
     the same window. See _safe_evaluate_js for what `closing` actually
     protects against.
+
+    `past_recap_tasks` — {task_key: said} from recap.latest_recap_tasks_by_key(),
+    loaded once at daily start by the caller — passed through to
+    get_hints() as past_said so live "Спроси" can notice progress (or its
+    absence) against the last time this task was discussed, not just show
+    it in the recap picker.
     """
     if closing is not None and closing.is_set():
         return pending
@@ -178,7 +187,8 @@ def _process_turn(speaker, text, t, agenda, meeting, alarm_task, api_key, window
 
     if primary:
         task = next(x for x in agenda if x.key == primary.task_key)
-        said, ask = get_hints(meeting.lines, task, api_key)
+        past_said = (past_recap_tasks or {}).get(task.key)
+        said, ask = get_hints(meeting.lines, task, api_key, past_said=past_said)
         meeting.set_hints(said, ask)
         push()
 
@@ -203,6 +213,7 @@ def _run_replay(window, loaded_event, closing=None):
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
+        past_recap_tasks = latest_recap_tasks_by_key()
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
         _safe_evaluate_js(window, f"renderMeeting({_state_json(meeting, agenda, alarm_task)})", closing)
@@ -220,7 +231,7 @@ def _run_replay(window, loaded_event, closing=None):
             t += pause
             pending = _process_turn(
                 turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending,
-                closing=closing,
+                closing=closing, past_recap_tasks=past_recap_tasks,
             )
 
         meeting.phase = "after"
@@ -253,6 +264,7 @@ def _run_live(window, loaded_event, closing=None):
         alarm_task = pick_alarm(agenda)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
         speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")
+        past_recap_tasks = latest_recap_tasks_by_key()
 
         meeting = Meeting(phase="live", remaining_count=len(agenda))
         _safe_evaluate_js(window, f"renderMeeting({_state_json(meeting, agenda, alarm_task)})", closing)
@@ -270,7 +282,7 @@ def _run_live(window, loaded_event, closing=None):
                 t = time.monotonic() - start
                 state["pending"] = _process_turn(
                     speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"],
-                    closing=closing,
+                    closing=closing, past_recap_tasks=past_recap_tasks,
                 )
 
         session = LiveAudioSession(speechmatics_key, on_turn, additional_vocab=build_additional_vocab(agenda))

@@ -346,6 +346,26 @@ A recap is only saved if at least one of the two parts has content
 (`if records or overview["gist"] or overview["topics"]`) — a daily where
 literally nothing was said saves nothing.
 
+## Past context feeds the live hints, not just the picker
+
+Browsing past dailies in the panel is one thing; the live agent noticing
+progress (or its absence) against what was said last time is another — and
+was the actual point of testing this against real dailies. At daily start,
+`_run_live`/`_run_replay` call `recap.latest_recap_tasks_by_key()` once —
+`{task_key: said}` from the single most recent saved recap — and thread it
+through `_process_turn()` into `get_hints(..., past_said=...)` whenever the
+recognized task was also discussed last time.
+
+`get_hints()`'s prompt gets an extra "Что говорили по этой задаче в прошлый
+раз" block when `past_said` is given, with an explicit rule not to blend it
+into `said` (which stays scoped to today's actual speech) — only to inform
+`ask` (e.g. surfacing "this was promised done today, but they just said
+they haven't started" as the question to raise). Verified against a real
+OpenRouter call: given a fake yesterday-said "Дарья сказала, что закончит
+отчёты сегодня" and a fake today-line "по отчётам пока не приступила",
+`ask` came back "Почему отчёты ещё не начаты, если по плану их должны были
+закончить сегодня?" — `said` stayed about today only.
+
 Generation runs in a non-daemon background thread on window close: the
 window closes immediately, but the process itself stays alive a few extra
 seconds to finish the LLM calls and write the file — see

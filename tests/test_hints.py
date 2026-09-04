@@ -93,3 +93,30 @@ def test_get_hints_lookback_none_includes_everything():
     user_content = captured["payload"]["messages"][1]["content"]
     assert "Свежая реплика" in user_content
     assert "Реплика минуту назад" in user_content
+
+
+def test_get_hints_includes_past_said_when_given():
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["payload"] = json
+        return _mock_response({"said": [], "ask": None})
+
+    with patch("hints.requests.post", side_effect=fake_post):
+        get_hints(LINES, TASK, api_key="fake", past_said=["Вчера обещали закончить сегодня"])
+    user_content = captured["payload"]["messages"][1]["content"]
+    assert "Что говорили по этой задаче в прошлый раз" in user_content
+    assert "Вчера обещали закончить сегодня" in user_content
+
+
+def test_get_hints_omits_past_context_when_not_given():
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["payload"] = json
+        return _mock_response({"said": [], "ask": None})
+
+    with patch("hints.requests.post", side_effect=fake_post):
+        get_hints(LINES, TASK, api_key="fake")
+    user_content = captured["payload"]["messages"][1]["content"]
+    assert "Что говорили по этой задаче в прошлый раз" not in user_content

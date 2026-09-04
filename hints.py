@@ -48,7 +48,13 @@ SYSTEM_PROMPT = (
     "- В целом: не приписывай реплике намерения, обещания или будущие "
     "результаты, которых в ней нет — только то, что было сказано буквально "
     "или является прямым перефразированием.\n"
-    "- Никогда не предлагай действий в Jira — это вне твоей роли."
+    "- Никогда не предлагай действий в Jira — это вне твоей роли.\n"
+    "- Если дан блок «Что говорили по этой задаче в прошлый раз» — это "
+    "контекст из прошлого дейлика, не реплики сегодняшнего. Используй его "
+    "только чтобы заметить прогресс или его отсутствие (например: раньше "
+    "обещали закончить сегодня, а сейчас говорят что не начинали — это "
+    "повод для ask). Никогда не бери формулировки из прошлого раза в "
+    "said — said строится только из сегодняшних реплик."
 )
 
 
@@ -98,12 +104,18 @@ def get_hints(
     api_key: str,
     timeout: float = 6.0,
     lookback_seconds: float | None = LOOKBACK_SECONDS,
+    past_said: list[str] | None = None,
 ) -> tuple[list[str], str | None]:
     if not lines:
         return [], None
     now_t = lines[-1].t
     window_label = "за последние 90с" if lookback_seconds is not None else "за всё обсуждение"
+    past_context = ""
+    if past_said:
+        past_lines = "\n".join(f"- {s}" for s in past_said)
+        past_context = f"Что говорили по этой задаче в прошлый раз:\n{past_lines}\n\n"
     user_content = (
+        f"{past_context}"
         f"Карточка задачи:\n{_task_card(task)}\n\n"
         f"Реплики {window_label}:\n{_recent_lines_text(lines, now_t, lookback_seconds)}"
     )

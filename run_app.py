@@ -21,7 +21,7 @@ from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from live_audio import LiveAudioSession, build_additional_vocab
 from meeting import Meeting
-from recap import build_overview, build_recap, list_recaps, read_recap, save_recap
+from recap import build_overview, build_recap, latest_recap_tasks_by_key, list_recaps, read_recap, save_recap
 from run_polosa_replay import _state_json as _polosa_state_json
 from run_second_screen import LLM_KEY_PATH, SPEECHMATICS_KEY_PATH, TEAM, _WORD_RE, _process_turn, _safe_evaluate_js
 from run_second_screen import _state_json as _rich_state_json
@@ -67,6 +67,7 @@ def _run_replay(window, loaded_event, state_ref, session_ref, closing=None):
         with open("fixtures/sample_daily_transcript.json", encoding="utf-8") as f:
             transcript = json.load(f)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
+        past_recap_tasks = latest_recap_tasks_by_key()
 
         meeting = Meeting(phase="before", remaining_count=len(agenda))
         session_ref.update(meeting=meeting, agenda=agenda, alarm_task=alarm_task)
@@ -86,7 +87,7 @@ def _run_replay(window, loaded_event, state_ref, session_ref, closing=None):
             t += pause
             pending = _process_turn(
                 turn["speaker"], turn["text"], t, agenda, meeting, alarm_task, api_key, window, pending, push=push,
-                closing=closing,
+                closing=closing, past_recap_tasks=past_recap_tasks,
             )
 
         meeting.phase = "after"
@@ -104,6 +105,7 @@ def _run_live(window, loaded_event, state_ref, session_ref, closing=None):
         alarm_task = pick_alarm(agenda)
         api_key = load_credential(LLM_KEY_PATH, "OPENROUTER_API_KEY")
         speechmatics_key = load_credential(SPEECHMATICS_KEY_PATH, "SPEECHMATICS_API_KEY")
+        past_recap_tasks = latest_recap_tasks_by_key()
 
         meeting = Meeting(phase="live", remaining_count=len(agenda))
         session_ref.update(meeting=meeting, agenda=agenda, alarm_task=alarm_task)
@@ -121,7 +123,7 @@ def _run_live(window, loaded_event, state_ref, session_ref, closing=None):
                 t = time.monotonic() - start
                 state["pending"] = _process_turn(
                     speaker, text, t, agenda, meeting, alarm_task, api_key, window, state["pending"], push=push,
-                    closing=closing,
+                    closing=closing, past_recap_tasks=past_recap_tasks,
                 )
 
         session = LiveAudioSession(speechmatics_key, on_turn, additional_vocab=build_additional_vocab(agenda))

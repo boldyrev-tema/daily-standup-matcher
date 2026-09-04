@@ -7,7 +7,7 @@ import requests
 
 from meeting import Line, Meeting
 from sprint_snapshot import Task
-from recap import build_overview, build_recap, save_recap, list_recaps, read_recap
+from recap import build_overview, build_recap, save_recap, list_recaps, read_recap, latest_recap_tasks_by_key
 
 TASK_A = Task(
     key="NOVA-1", title="Дубли платежей", assignee="Дарья",
@@ -209,3 +209,23 @@ def test_read_recap_rejects_path_traversal(tmp_path):
     (tmp_path.parent / "secret.json").write_text("{}", encoding="utf-8")
     assert read_recap("../secret.json", dir=str(tmp_path)) is None
     assert read_recap("/etc/passwd", dir=str(tmp_path)) is None
+
+
+def test_latest_recap_tasks_by_key_returns_empty_dict_when_no_recaps(tmp_path):
+    assert latest_recap_tasks_by_key(dir=str(tmp_path)) == {}
+
+
+def test_latest_recap_tasks_by_key_indexes_most_recent_recap_by_task_key(tmp_path):
+    (tmp_path / "2026-09-01_10-00-00.json").write_text(json.dumps({
+        "generated_at": "2026-09-01T10:00:00+00:00", "overview": {"gist": "", "topics": []},
+        "tasks": [{"key": "NOVA-1", "title": "Old", "said": ["старое"]}],
+    }), encoding="utf-8")
+    (tmp_path / "2026-09-02_10-00-00.json").write_text(json.dumps({
+        "generated_at": "2026-09-02T10:00:00+00:00", "overview": {"gist": "", "topics": []},
+        "tasks": [
+            {"key": "NOVA-1", "title": "Дубли платежей", "said": ["почти готово"]},
+            {"key": "NOVA-2", "title": "Экспорт в CSV", "said": ["готово"]},
+        ],
+    }), encoding="utf-8")
+    result = latest_recap_tasks_by_key(dir=str(tmp_path))
+    assert result == {"NOVA-1": ["почти готово"], "NOVA-2": ["готово"]}
