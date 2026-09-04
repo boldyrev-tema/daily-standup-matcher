@@ -405,9 +405,11 @@ venv/bin/python3 make_app_icon.py   # writes AppIcon.icns — setup_app.py refus
 venv/bin/python3 setup_app.py py2app
 ```
 
-`dist/`, `build/`, `logs/`, and `AppIcon.icns` are gitignored — nothing
-here is committed, only the scripts that produce them
-(`make_app_icon.py`/`setup_*.py`). Two native dependencies
+`dist/`, `build/`, `logs/`, `bin/`, and `AppIcon.icns` are gitignored —
+nothing here is committed, only the scripts that produce/reference them
+(`make_app_icon.py`/`setup_*.py`). If `bin/SystemAudioDump` exists locally
+(see "Live microphone" above), every `setup_*.py` bundles it into the
+built `.app` automatically — no extra step needed. Two native dependencies
 needed forcing into `packages` in every `setup_*.py` (py2app's static
 import analysis misses their non-code files otherwise): `pymorphy3_dicts_ru`
 (dictionary data, "Can't find a dictionary for language 'ru'" without it)
