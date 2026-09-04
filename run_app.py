@@ -21,7 +21,7 @@ from agenda import build_agenda, pick_alarm
 from credentials import load_credential
 from live_audio import LiveAudioSession, build_additional_vocab
 from meeting import Meeting
-from recap import build_recap, latest_recap, save_recap
+from recap import build_overview, build_recap, latest_recap, save_recap
 from run_polosa_replay import _state_json as _polosa_state_json
 from run_second_screen import LLM_KEY_PATH, SPEECHMATICS_KEY_PATH, TEAM, _WORD_RE, _process_turn, _safe_evaluate_js
 from run_second_screen import _state_json as _rich_state_json
@@ -134,8 +134,9 @@ def _run_live(window, loaded_event, state_ref, session_ref, closing=None):
             def _do_save():
                 try:
                     records = build_recap(meeting, agenda, api_key)
-                    if records:
-                        save_recap(records)
+                    overview = build_overview(meeting, api_key)
+                    if records or overview:
+                        save_recap(records, overview)
                 except Exception as e:
                     print(f"recap save failed: {e}", file=sys.stderr)
 

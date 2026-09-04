@@ -153,6 +153,19 @@
   }
   .recap-panel-header button:hover { background: var(--control-hover); color: var(--ink); }
   #recap-panel-body { overflow-y: auto; min-height: 0; }
+  .recap-overview {
+    margin-bottom: 14px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .recap-overview-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--dim); margin-bottom: 6px;
+  }
+  .recap-overview-line {
+    font-size: 12px; line-height: 1.4; color: var(--ink);
+    margin: 0 0 3px 0; padding-left: 12px; position: relative;
+  }
+  .recap-overview-line::before { content: "–"; position: absolute; left: 0; color: var(--dim); }
   .recap-task { margin-bottom: 12px; }
   .recap-task:last-child { margin-bottom: 0; }
   .recap-task-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
@@ -165,7 +178,7 @@
 </head>
 <body>
   <div class="window-controls">
-    <button id="recap-btn" title="Прошлый дейлик" aria-label="Показать прошлый дейлик" style="display:none;">🕘</button>
+    <button id="recap-btn" title="Прошлый дейлик" aria-label="Показать прошлый дейлик" style="display:none;">↺</button>
     <button id="theme-btn" title="Сменить тему" aria-label="Сменить тему">🌙</button>
     <button id="minimize-btn" title="Свернуть" aria-label="Свернуть окно">–</button>
     <button id="close-btn" title="Закрыть" aria-label="Закрыть окно">×</button>
@@ -357,6 +370,21 @@ function renderRecap(data) {
   document.getElementById("recap-panel-title").textContent = "Прошлый дейлик — " + dateLabel;
   const body = document.getElementById("recap-panel-body");
   body.innerHTML = "";
+  if (data.overview && data.overview.length > 0) {
+    const overview = document.createElement("div");
+    overview.className = "recap-overview";
+    const label = document.createElement("div");
+    label.className = "recap-overview-label";
+    label.textContent = "О чём говорили";
+    overview.appendChild(label);
+    data.overview.forEach(topic => {
+      const p = document.createElement("p");
+      p.className = "recap-overview-line";
+      p.textContent = topic;
+      overview.appendChild(p);
+    });
+    body.appendChild(overview);
+  }
   data.tasks.forEach(task => {
     const div = document.createElement("div");
     div.className = "recap-task";

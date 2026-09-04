@@ -303,27 +303,44 @@ a real sprint before this is more than "should work."
 ## Post-daily recap (`recap.py`, rendered inline in `second_screen.html`)
 
 On closing a `--live` window, the app builds a short recap of what was
-discussed per task and saves it to `recaps/*.json` (gitignored — real
-transcript content, this repo is public). On the next `--live` launch, if a
-saved recap exists, "Второй экран" shows it immediately in a panel at the
-bottom of the "Слышу" column — closable with its own × without touching the
-rest of the screen, and reopenable any time from the 🕘 button next to the
-window's theme/minimize/close controls (top-left). Only "Второй экран" has
+discussed and saves it to `recaps/*.json` (gitignored — real transcript
+content, this repo is public). On the next `--live` launch, if a saved
+recap exists, "Второй экран" shows it immediately in a panel at the bottom
+of the "Слышу" column — closable with its own × without touching the rest
+of the screen, and reopenable any time from the ↺ button next to the
+window's theme/minimize/close controls (top-right). Only "Второй экран" has
 this panel — "Полоса" and "Колонка" don't render it, and switching to
 `Дейлик.app`'s unified layout picker and back re-shows it (the meeting
 itself never restarts on a layout switch, only what's loaded in the window
 changes — same as everything else `_push_state` re-sends).
 
-The matcher only tags the ONE utterance that actually triggered task
-recognition (`Line.task`) — the rest of a task's discussion (clarifications,
-"when can you merge that", "tonight") never gets tagged, since `match()`
-only looks at each utterance's own text. `build_recap()` groups
-`meeting.lines` by time segment between consecutive recognition points
-instead of by that narrow tag, so the recap covers the actual conversation,
-not just the trigger line — then calls the same `hints.get_hints()` used for
-the live "Сказали" hints, with a new `lookback_seconds=None` mode that skips
-its normal 90-second window (a full-task summary needs everything, not just
-the last 90s of it).
+The recap has two parts, stacked in the panel:
+
+- **"О чём говорили"** (`build_overview()`) — a whole-call topic list, same
+  idea as Granola/Fireflies' call summaries: independent of whether any
+  task got recognized against the agenda, so it still has something to show
+  even on a daily where nothing matched (talking about work the matcher's
+  agenda doesn't know about, or no agenda loaded at all). One extra
+  OpenRouter call over the full `meeting.lines` transcript, same
+  `hints.MODEL_CHAIN` fallback and same best-effort contract as
+  `get_hints()` (silently returns `[]` on total failure — a missing
+  overview must never block the per-task recap below it or the save
+  itself).
+- **Per-task breakdown** (`build_recap()`) — unchanged: only for tasks the
+  matcher actually recognized. The matcher only tags the ONE utterance that
+  actually triggered task recognition (`Line.task`) — the rest of a task's
+  discussion (clarifications, "when can you merge that", "tonight") never
+  gets tagged, since `match()` only looks at each utterance's own text.
+  `build_recap()` groups `meeting.lines` by time segment between
+  consecutive recognition points instead of by that narrow tag, so it
+  covers the actual conversation, not just the trigger line — then calls
+  the same `hints.get_hints()` used for the live "Сказали" hints, with a
+  `lookback_seconds=None` mode that skips its normal 90-second window (a
+  full-task summary needs everything, not just the last 90s of it).
+
+A recap is only saved if at least one of the two parts has content
+(`if records or overview`) — a daily where literally nothing was said
+saves nothing, same as before.
 
 Generation runs in a non-daemon background thread on window close: the
 window closes immediately, but the process itself stays alive a few extra

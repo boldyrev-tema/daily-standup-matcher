@@ -14,7 +14,7 @@ from hints import get_hints
 from live_audio import LiveAudioSession, build_additional_vocab
 from match_core import MatchResult, ambiguous_candidates, match, resolve_pending
 from meeting import Line, Meeting
-from recap import build_recap, latest_recap, save_recap
+from recap import build_overview, build_recap, latest_recap, save_recap
 from sprint_snapshot import Task, load_current_sprint
 
 TEAM = ["Дарья Ковалёва", "Максим Орлов", "Полина Реброва", "Игорь Сафин"]
@@ -294,8 +294,9 @@ def _run_live(window, loaded_event, closing=None):
             def _do_save():
                 try:
                     records = build_recap(meeting, agenda, api_key)
-                    if records:
-                        save_recap(records)
+                    overview = build_overview(meeting, api_key)
+                    if records or overview:
+                        save_recap(records, overview)
                 except Exception as e:
                     print(f"recap save failed: {e}", file=sys.stderr)
 

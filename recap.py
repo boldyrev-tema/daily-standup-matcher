@@ -2,11 +2,28 @@ import json
 import os
 from datetime import datetime, timezone
 
-from hints import get_hints
+import requests
+
+from hints import MODEL_CHAIN, OPENROUTER_ENDPOINT, get_hints
 from meeting import Meeting
 from sprint_snapshot import Task
 
 RECAPS_DIR = "recaps"
+
+OVERVIEW_SYSTEM_PROMPT = (
+    "Ты анализируешь транскрипт рабочего дейлика (утренней встречи команды). "
+    "Выдели короткий список тем, которые реально обсуждались за весь дейлик — "
+    "не только то, что привязано к конкретным задачам в Jira, а вообще всё "
+    "содержательное.\n\n"
+    "Верни СТРОГО JSON-объект вида:\n"
+    '{"topics": ["короткая тема 1", "короткая тема 2"]}\n\n'
+    "Правила:\n"
+    "- Не пересказывай светскую беседу (приветствия, посторонние темы).\n"
+    "- Каждая тема — одна короткая фраза, не длиннее 80 знаков.\n"
+    "- Не более 5 тем.\n"
+    "- Если содержательного обсуждения не было — верни {\"topics\": []}.\n"
+    "- Не придумывай темы, которых не было в разговоре."
+)
 
 
 def build_recap(meeting: Meeting, agenda: list[Task], api_key: str) -> list[dict]:
@@ -61,12 +78,59 @@ def build_recap(meeting: Meeting, agenda: list[Task], api_key: str) -> list[dict
     return records
 
 
-def save_recap(records: list[dict], dir: str = RECAPS_DIR) -> str:
+def build_overview(meeting: Meeting, api_key: str) -> list[str]:
+    """General "what was this daily about" topics, independent of whether
+    any task got recognized — the Granola/Fireflies-style whole-call
+    summary, shown as a block on top of (not instead of) the per-task recap
+    below it (per-task 'Sagen' stays exact/task-anchored; this is coarser
+    but survives even when nothing matched the agenda).
+
+    Best-effort like get_hints() itself: any failure (network, parsing,
+    schema) falls through to the next model in the chain, and an empty list
+    on total failure rather than raising — a missing overview must never
+    block the per-task recap that _save_recap_on_close already builds.
+    """
+    text = "\n".join(f"{line.who or '?'}: {line.text}" for line in meeting.lines)
+    if not text.strip():
+        return []
+
+    base_payload = {
+        "messages": [
+            {"role": "system", "content": OVERVIEW_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Транскрипт дейлика:\n{text}"},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0,
+    }
+
+    for model, extra in MODEL_CHAIN:
+        payload = {**base_payload, "model": model, **extra}
+        try:
+            resp = requests.post(
+                OPENROUTER_ENDPOINT,
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+            parsed = json.loads(content)
+            topics = parsed.get("topics", [])
+            if not isinstance(topics, list):
+                continue
+            return [t for t in topics if isinstance(t, str) and t][:5]
+        except (requests.exceptions.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError):
+            continue
+    return []
+
+
+def save_recap(records: list[dict], overview: list[str] | None = None, dir: str = RECAPS_DIR) -> str:
     os.makedirs(dir, exist_ok=True)
     now = datetime.now(timezone.utc)
     path = os.path.join(dir, now.strftime("%Y-%m-%d_%H-%M-%S") + ".json")
+    data = {"generated_at": now.isoformat(), "overview": overview or [], "tasks": records}
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"generated_at": now.isoformat(), "tasks": records}, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2)
     return path
 
 
