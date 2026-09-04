@@ -104,15 +104,16 @@ def test_save_recap_writes_json_with_generated_at_and_tasks(tmp_path):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     assert data["tasks"] == records
-    assert data["overview"] == []
+    assert data["overview"] == {"gist": "", "topics": []}
     assert "generated_at" in data
 
 
 def test_save_recap_includes_overview_when_given(tmp_path):
-    path = save_recap([], overview=["Обсудили релиз"], dir=str(tmp_path))
+    overview = {"gist": "Обсудили релиз и отчёты", "topics": ["Обсудили релиз"]}
+    path = save_recap([], overview=overview, dir=str(tmp_path))
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    assert data["overview"] == ["Обсудили релиз"]
+    assert data["overview"] == overview
 
 
 def _mock_openrouter_response(content_dict):
@@ -124,21 +125,27 @@ def _mock_openrouter_response(content_dict):
     return mock_resp
 
 
-def test_build_overview_returns_empty_list_for_empty_meeting():
+def test_build_overview_returns_empty_overview_for_empty_meeting():
     meeting = Meeting()
-    assert build_overview(meeting, api_key="fake") == []
+    assert build_overview(meeting, api_key="fake") == {"gist": "", "topics": []}
 
 
 @patch("recap.requests.post")
-def test_build_overview_returns_topics_from_response(mock_post):
+def test_build_overview_returns_gist_and_topics_from_response(mock_post):
     mock_post.return_value = _mock_openrouter_response(
-        {"topics": ["Обсудили релиз", "Договорились про митинг"]}
+        {
+            "gist": "Обсудили релиз и договорились про митинг",
+            "topics": ["Обсудили релиз", "Договорились про митинг"],
+        }
     )
     meeting = _meeting_with(
         [Line(t=1.0, who="Дарья", text="Когда релиз?", task=None)], done=[]
     )
-    topics = build_overview(meeting, api_key="fake")
-    assert topics == ["Обсудили релиз", "Договорились про митинг"]
+    overview = build_overview(meeting, api_key="fake")
+    assert overview == {
+        "gist": "Обсудили релиз и договорились про митинг",
+        "topics": ["Обсудили релиз", "Договорились про митинг"],
+    }
 
 
 @patch("recap.requests.post")
@@ -148,23 +155,23 @@ def test_build_overview_falls_back_across_model_chain_on_failure(mock_post):
     mock_post.side_effect = [
         requests.exceptions.ConnectionError("boom"),
         requests.exceptions.ConnectionError("boom"),
-        _mock_openrouter_response({"topics": ["Тема после фолбэка"]}),
+        _mock_openrouter_response({"gist": "Кратко о звонке", "topics": ["Тема после фолбэка"]}),
     ]
     meeting = _meeting_with(
         [Line(t=1.0, who="Дарья", text="Что-то обсудили", task=None)], done=[]
     )
-    topics = build_overview(meeting, api_key="fake")
-    assert topics == ["Тема после фолбэка"]
+    overview = build_overview(meeting, api_key="fake")
+    assert overview == {"gist": "Кратко о звонке", "topics": ["Тема после фолбэка"]}
     assert mock_post.call_count == 3
 
 
 @patch("recap.requests.post")
-def test_build_overview_returns_empty_list_when_all_models_fail(mock_post):
+def test_build_overview_returns_empty_overview_when_all_models_fail(mock_post):
     mock_post.side_effect = requests.exceptions.ConnectionError("boom")
     meeting = _meeting_with(
         [Line(t=1.0, who="Дарья", text="Что-то обсудили", task=None)], done=[]
     )
-    assert build_overview(meeting, api_key="fake") == []
+    assert build_overview(meeting, api_key="fake") == {"gist": "", "topics": []}
 
 
 def test_latest_recap_returns_none_when_dir_missing(tmp_path):

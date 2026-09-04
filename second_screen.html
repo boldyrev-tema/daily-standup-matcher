@@ -166,6 +166,10 @@
     margin: 0 0 3px 0; padding-left: 12px; position: relative;
   }
   .recap-overview-line::before { content: "–"; position: absolute; left: 0; color: var(--dim); }
+  .recap-gist {
+    font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--ink);
+    margin: 0 0 10px;
+  }
   .recap-task { margin-bottom: 12px; }
   .recap-task:last-child { margin-bottom: 0; }
   .recap-task-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
@@ -370,19 +374,29 @@ function renderRecap(data) {
   document.getElementById("recap-panel-title").textContent = "Прошлый дейлик — " + dateLabel;
   const body = document.getElementById("recap-panel-body");
   body.innerHTML = "";
-  if (data.overview && data.overview.length > 0) {
+  const gist = data.overview && data.overview.gist;
+  const topics = (data.overview && data.overview.topics) || [];
+  if (gist || topics.length > 0) {
     const overview = document.createElement("div");
     overview.className = "recap-overview";
-    const label = document.createElement("div");
-    label.className = "recap-overview-label";
-    label.textContent = "О чём говорили";
-    overview.appendChild(label);
-    data.overview.forEach(topic => {
-      const p = document.createElement("p");
-      p.className = "recap-overview-line";
-      p.textContent = topic;
-      overview.appendChild(p);
-    });
+    if (gist) {
+      const gistEl = document.createElement("p");
+      gistEl.className = "recap-gist";
+      gistEl.textContent = gist;
+      overview.appendChild(gistEl);
+    }
+    if (topics.length > 0) {
+      const label = document.createElement("div");
+      label.className = "recap-overview-label";
+      label.textContent = "О чём говорили";
+      overview.appendChild(label);
+      topics.forEach(topic => {
+        const p = document.createElement("p");
+        p.className = "recap-overview-line";
+        p.textContent = topic;
+        overview.appendChild(p);
+      });
+    }
     body.appendChild(overview);
   }
   data.tasks.forEach(task => {

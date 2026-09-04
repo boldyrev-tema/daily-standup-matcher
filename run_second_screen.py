@@ -295,7 +295,7 @@ def _run_live(window, loaded_event, closing=None):
                 try:
                     records = build_recap(meeting, agenda, api_key)
                     overview = build_overview(meeting, api_key)
-                    if records or overview:
+                    if records or overview["gist"] or overview["topics"]:
                         save_recap(records, overview)
                 except Exception as e:
                     print(f"recap save failed: {e}", file=sys.stderr)

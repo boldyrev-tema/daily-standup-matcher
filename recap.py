@@ -12,17 +12,22 @@ RECAPS_DIR = "recaps"
 
 OVERVIEW_SYSTEM_PROMPT = (
     "Ты анализируешь транскрипт рабочего дейлика (утренней встречи команды). "
-    "Выдели короткий список тем, которые реально обсуждались за весь дейлик — "
+    "Сначала одной фразой обобщи, о чём вообще был весь разговор целиком. "
+    "Затем выдели короткий список тем, которые реально обсуждались — "
     "не только то, что привязано к конкретным задачам в Jira, а вообще всё "
     "содержательное.\n\n"
     "Верни СТРОГО JSON-объект вида:\n"
-    '{"topics": ["короткая тема 1", "короткая тема 2"]}\n\n'
+    '{"gist": "одна фраза-обобщение всего разговора", '
+    '"topics": ["короткая тема 1", "короткая тема 2"]}\n\n'
     "Правила:\n"
+    "- gist — ровно одно предложение, не длиннее 150 знаков, обобщающее "
+    "разговор целиком (не первая тема, а именно сводка всего).\n"
     "- Не пересказывай светскую беседу (приветствия, посторонние темы).\n"
-    "- Каждая тема — одна короткая фраза, не длиннее 80 знаков.\n"
+    "- Каждая тема в topics — одна короткая фраза, не длиннее 80 знаков.\n"
     "- Не более 5 тем.\n"
-    "- Если содержательного обсуждения не было — верни {\"topics\": []}.\n"
-    "- Не придумывай темы, которых не было в разговоре."
+    "- Если содержательного обсуждения не было — верни "
+    '{"gist": "", "topics": []}.\n'
+    "- Не придумывай ничего, чего не было в разговоре."
 )
 
 
@@ -78,21 +83,25 @@ def build_recap(meeting: Meeting, agenda: list[Task], api_key: str) -> list[dict
     return records
 
 
-def build_overview(meeting: Meeting, api_key: str) -> list[str]:
-    """General "what was this daily about" topics, independent of whether
-    any task got recognized — the Granola/Fireflies-style whole-call
-    summary, shown as a block on top of (not instead of) the per-task recap
-    below it (per-task 'Sagen' stays exact/task-anchored; this is coarser
-    but survives even when nothing matched the agenda).
+_EMPTY_OVERVIEW = {"gist": "", "topics": []}
+
+
+def build_overview(meeting: Meeting, api_key: str) -> dict:
+    """General "what was this daily about" — gist (one sentence) + topics
+    (short list), independent of whether any task got recognized. The
+    Granola/Fireflies-style whole-call summary, shown as a block on top of
+    (not instead of) the per-task recap below it (per-task 'said' stays
+    exact/task-anchored; this is coarser but survives even when nothing
+    matched the agenda). Returns {"gist": str, "topics": list[str]}.
 
     Best-effort like get_hints() itself: any failure (network, parsing,
-    schema) falls through to the next model in the chain, and an empty list
+    schema) falls through to the next model in the chain, and _EMPTY_OVERVIEW
     on total failure rather than raising — a missing overview must never
     block the per-task recap that _save_recap_on_close already builds.
     """
     text = "\n".join(f"{line.who or '?'}: {line.text}" for line in meeting.lines)
     if not text.strip():
-        return []
+        return dict(_EMPTY_OVERVIEW)
 
     base_payload = {
         "messages": [
@@ -116,19 +125,23 @@ def build_overview(meeting: Meeting, api_key: str) -> list[str]:
             content = resp.json()["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             topics = parsed.get("topics", [])
-            if not isinstance(topics, list):
+            gist = parsed.get("gist", "")
+            if not isinstance(topics, list) or not isinstance(gist, str):
                 continue
-            return [t for t in topics if isinstance(t, str) and t][:5]
+            return {
+                "gist": gist,
+                "topics": [t for t in topics if isinstance(t, str) and t][:5],
+            }
         except (requests.exceptions.RequestException, KeyError, IndexError, TypeError, json.JSONDecodeError):
             continue
-    return []
+    return dict(_EMPTY_OVERVIEW)
 
 
-def save_recap(records: list[dict], overview: list[str] | None = None, dir: str = RECAPS_DIR) -> str:
+def save_recap(records: list[dict], overview: dict | None = None, dir: str = RECAPS_DIR) -> str:
     os.makedirs(dir, exist_ok=True)
     now = datetime.now(timezone.utc)
     path = os.path.join(dir, now.strftime("%Y-%m-%d_%H-%M-%S") + ".json")
-    data = {"generated_at": now.isoformat(), "overview": overview or [], "tasks": records}
+    data = {"generated_at": now.isoformat(), "overview": overview or dict(_EMPTY_OVERVIEW), "tasks": records}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return path
