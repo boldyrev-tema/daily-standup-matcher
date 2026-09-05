@@ -117,6 +117,42 @@ def test_case3b_second_regression_found_watching_the_full_demo():
     assert results[0].reason == "title_words"
 
 
+def test_phrase_window_rejects_scattered_common_words_far_apart():
+    # Real false positive (Rinat, 5 сен, live testing): task "Мои дела"
+    # matched an utterance where "мой" (from "по-моему") and "дело" (from
+    # "на самом деле") each appeared, far apart in an unrelated sentence —
+    # coincidental overlap of two common words, not the task being
+    # discussed at all.
+    agenda = [_task("T-1", "Мои дела")]
+    results = match(
+        "по-моему тут все не так, надо начать заново с самого начала, "
+        "на самом деле",
+        agenda,
+    )
+    assert results == []
+
+
+def test_phrase_window_accepts_words_spoken_close_together():
+    # Same title, but the two words are actually spoken together as a
+    # phrase — must still match.
+    agenda = [_task("T-1", "Мои дела")]
+    results = match("ладно, займусь, это мои дела в общем-то", agenda)
+    assert [r.task_key for r in results] == ["T-1"]
+
+
+def test_phrase_window_does_not_affect_latin_alias_overlap():
+    # Regression guard: the phrase-window check only applies to direct
+    # lemma hits, which have real utterance positions — Latin-alias hits
+    # (_latin_alias_overlap) have none and must keep matching exactly as
+    # before, even though this whole utterance is much longer than
+    # PHRASE_WINDOW.
+    results = match(
+        "вообще весь код ревью на за весь процесс койку сетапа недоверие программистом",
+        [_task("T-1", "Code Review для PR по авторизации")],
+    )
+    assert [r.task_key for r in results] == ["T-1"]
+
+
 def test_case4_single_overlapping_word_is_not_enough():
     results = match("короче там ждём поставщиков ещё", AGENDA)
     assert results == []

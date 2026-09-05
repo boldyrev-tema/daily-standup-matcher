@@ -14,6 +14,7 @@ _CYRILLIC_RE = re.compile(r"^[а-яё]+$")
 MIN_OVERLAP_WORDS = 2
 MIN_SCORE = 0.5
 REQUIRED_MARGIN = 0.3
+PHRASE_WINDOW = 2
 
 
 def _tokenize(text: str) -> list[str]:
@@ -56,6 +57,33 @@ def _latin_alias_overlap(utterance_tokens: list[str], title_lemmas: set[str]) ->
     return hits
 
 
+def _has_phrase_window(utterance_lemmas: list[str], significant_lemmas: set[str]) -> bool:
+    """True if at least MIN_OVERLAP_WORDS DISTINCT lemmas from
+    `significant_lemmas` occur within PHRASE_WINDOW positions of each other
+    in `utterance_lemmas` — i.e. were actually spoken close together as a
+    phrase, not just present somewhere in a long, unrelated utterance.
+
+    Real false positive (Rinat, 5 сен, live testing): task title "Мои дела"
+    matched an utterance where "мой" (from "по-моему") and "дело" (from "на
+    самом деле") each appeared, far apart, in an unrelated sentence — two
+    common words coincidentally overlapping the title, not the task
+    actually being discussed. A title's own words are adjacent by
+    construction, so requiring the utterance's overlapping words to cluster
+    the same way filters this out while keeping real mentions ("готова
+    функциональная заявка для поставщиков" — заявка/поставщик 2 positions
+    apart — still passes at PHRASE_WINDOW=2, verified against the real
+    fixture titles this project already ships).
+    """
+    positions = [i for i, lemma in enumerate(utterance_lemmas) if lemma in significant_lemmas]
+    for i in range(len(positions)):
+        for j in range(i + 1, len(positions)):
+            if positions[j] - positions[i] > PHRASE_WINDOW:
+                continue
+            if utterance_lemmas[positions[i]] != utterance_lemmas[positions[j]]:
+                return True
+    return False
+
+
 def score_task(
     utterance_lemmas: list[str],
     task: Task,
@@ -63,9 +91,9 @@ def score_task(
     utterance_tokens: list[str] | None = None,
 ) -> tuple[float, int]:
     title_lemmas = set(lemmatize(_tokenize(task.title)))
-    overlap = set(utterance_lemmas) & title_lemmas
-    if utterance_tokens:
-        overlap = overlap | _latin_alias_overlap(utterance_tokens, title_lemmas)
+    direct_overlap = set(utterance_lemmas) & title_lemmas
+    alias_overlap = _latin_alias_overlap(utterance_tokens, title_lemmas) if utterance_tokens else set()
+    overlap = direct_overlap | alias_overlap
     score = sum(idf.get(lemma, 0.0) * stopword_discount(lemma) for lemma in overlap)
     # Only count words that aren't stopwords toward MIN_OVERLAP_WORDS below —
     # a shared "и"/"для"/"на" still nudges the score (discounted, not zeroed)
@@ -73,7 +101,19 @@ def score_task(
     # single real content word plus one shared filler word passes the gate.
     # Real false positives on a full transcript (Rinat, 31 авг): matched on
     # "и"/"для"/"на" pairing with one unrelated word each time.
-    significant_overlap = {lemma for lemma in overlap if stopword_discount(lemma) >= 1.0}
+    significant_direct = {lemma for lemma in direct_overlap if stopword_discount(lemma) >= 1.0}
+    significant_alias = {lemma for lemma in alias_overlap if stopword_discount(lemma) >= 1.0}
+    # Phrase-window check only applies to direct lemma hits, which have real
+    # utterance positions — alias hits (_latin_alias_overlap, e.g. Latin
+    # product names spoken as Cyrillic phonetics) have no comparable
+    # position and are already a narrower, deliberate signal on their own
+    # (see that function's docstring); requiring 2+ direct hits to cluster
+    # only kicks in when direct hits alone would otherwise satisfy the gate.
+    if len(significant_direct) >= MIN_OVERLAP_WORDS and not _has_phrase_window(
+        utterance_lemmas, significant_direct
+    ):
+        significant_direct = set()
+    significant_overlap = significant_direct | significant_alias
     return score, len(significant_overlap)
 
 

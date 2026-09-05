@@ -72,8 +72,15 @@ venv/bin/python3 -m pytest -v
   the time STT hands them over) short-circuit to a match; otherwise IDF-
   weighted lemma overlap (plus a fuzzy Cyrillic-phonetic alias for Latin
   title words) with a ≥2-significant-word minimum and a score-margin gate
-  against the runner-up candidate. Returns a list, since one utterance can
-  mention more than one task. `ambiguous_candidates()`/`resolve_pending()`
+  against the runner-up candidate. The ≥2-word minimum requires those words
+  to actually cluster together (`PHRASE_WINDOW = 2` positions apart) when
+  it's satisfied through direct lemma hits — real false positive (Rinat,
+  5 сен): a title like "Мои дела" matched an utterance where "мой" and
+  "дело" each appeared, far apart, in an unrelated sentence, two common
+  words coincidentally overlapping the title rather than it actually being
+  discussed. Doesn't apply to Latin-alias hits (no comparable utterance
+  position — a narrower, already-deliberate signal on its own). Returns a
+  list, since one utterance can mention more than one task. `ambiguous_candidates()`/`resolve_pending()`
   give a caller a second chance at a margin-blocked tie using the next
   utterance as extra context, restricted to the tied set so it can only pick
   a winner among real contenders, never surface a new one — wired into every
