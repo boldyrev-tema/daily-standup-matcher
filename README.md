@@ -8,6 +8,48 @@ Built without access to the original real code or real Fireflies
 transcripts — see `docs/superpowers/specs/2026-08-29-daily-standup-matcher-design.md`
 for what's a faithful reconstruction vs. an explicitly-flagged assumption.
 
+## Install (git clone → готовое приложение, без терминала после сборки)
+
+Одним куском, без прыжков по разделам — на выходе `dist/Дейлик.app`,
+открывается двойным кликом, дальше терминал не нужен вообще.
+
+```bash
+git clone https://github.com/boldyrev-tema/daily-standup-matcher.git
+cd daily-standup-matcher
+
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+venv/bin/python3 patch_pywebview.py
+```
+
+**Ключи** (кладутся в `~/.credentials/`, не в самом репозитории):
+
+| Файл | Формат | Обязателен для |
+|---|---|---|
+| `openrouter_api_key.env` | `OPENROUTER_API_KEY=...` | подсказок «Сказали»/«Спроси» и recap (без ключа — тихо не работает) |
+| `speechmatics_api_key.env` | `SPEECHMATICS_API_KEY=...` | живого микрофона (`--live`) |
+| `jira_credentials.env` | см. "Live Jira snapshot" ниже | опционально — без него берётся тестовая повестка из `fixtures/sprint.json` |
+
+Оба первых ключа — с бесплатным тарифом, без карты
+(openrouter.ai / portal.speechmatics.com).
+
+**Сборка приложения:**
+
+```bash
+venv/bin/python3 make_app_icon.py
+venv/bin/python3 setup_app.py py2app
+```
+
+Готово — `dist/Дейлик.app`. Перенести/скопировать его куда удобно (например
+в `/Applications`), дальше просто открывать двойным кликом; иконка
+приложения живёт в строке меню сверху экрана (не в Dock), оттуда же —
+переключение раскладок и выход. Открывается сразу в живом режиме
+(`--live`) — микрофон и, если положен `bin/SystemAudioDump` (уже в
+репозитории), голос собеседника тоже пишется.
+
+Подробности по каждому шагу — в разделах ниже ("Setup", "Live microphone",
+"Running as an app").
+
 ## Two ways to run it
 
 Pick whichever fits what you're doing right now — both run the exact same
