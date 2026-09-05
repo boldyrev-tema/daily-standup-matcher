@@ -1,8 +1,10 @@
+import platform
+import subprocess
 from datetime import datetime, timezone
 
 import numpy as np
 
-from live_audio import build_additional_vocab, pick_working_input_device
+from live_audio import build_additional_vocab, check_binary_arch, pick_working_input_device
 from sprint_snapshot import Task
 
 DEVICES = [
@@ -100,3 +102,38 @@ def test_build_additional_vocab_dedupes_case_insensitively_keeping_first_seen():
 
 def test_build_additional_vocab_empty_agenda():
     assert build_additional_vocab([]) == []
+
+
+def test_check_binary_arch_returns_none_for_the_committed_universal_binary():
+    # Real fixture, not synthetic — bin/SystemAudioDump is committed as a
+    # universal (arm64+x86_64) binary specifically so this never trips (see
+    # its own docstring for the real bug this guards, found live 5 сен on
+    # Rinat's Intel Mac against an arm64-only build).
+    assert check_binary_arch("bin/SystemAudioDump") is None
+
+
+def test_check_binary_arch_returns_message_for_a_mismatched_arch(tmp_path):
+    # /bin/ls is a real universal binary but only ships x86_64 + arm64e
+    # slices — never plain "arm64", which is what platform.machine() (and
+    # our own compiled binary) actually report on Apple Silicon. So on
+    # EITHER host arch, at least one of its slices is guaranteed to not
+    # match platform.machine() — pick whichever one that is.
+    mismatched_arch = "arm64e" if platform.machine() == "x86_64" else "x86_64"
+    thin_path = tmp_path / "thin_binary"
+    subprocess.run(["lipo", "-thin", mismatched_arch, "/bin/ls", "-output", str(thin_path)], check=True)
+
+    message = check_binary_arch(str(thin_path))
+
+    assert message is not None
+    assert mismatched_arch in message
+    assert platform.machine() in message
+
+
+def test_check_binary_arch_returns_none_when_lipo_is_unavailable(monkeypatch, tmp_path):
+    # Fail permissive — a missing dev tool must never block real usage of a
+    # binary that's actually fine.
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("no lipo")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert check_binary_arch("bin/SystemAudioDump") is None

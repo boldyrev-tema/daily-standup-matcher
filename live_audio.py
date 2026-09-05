@@ -1,6 +1,7 @@
 import asyncio
 import audioop
 import os
+import platform
 import queue
 import re
 import subprocess
@@ -71,6 +72,33 @@ SYS_SAMPLE_RATE = 24000  # SystemAudioDump's native output rate
 SYSTEM_AUDIO_DUMP_PATH = os.environ.get("SYSTEM_AUDIO_DUMP_PATH") or (
     _DEFAULT_SYSTEM_AUDIO_DUMP if os.path.exists(_DEFAULT_SYSTEM_AUDIO_DUMP) else ""
 )
+
+
+def check_binary_arch(path: str) -> str | None:
+    """None if `path` runs natively on this machine, else a ready-to-print
+    Russian error message. bin/SystemAudioDump is committed as a universal
+    binary (arm64 + x86_64, see bin/README.md) precisely so this never
+    trips in practice — but a manually-replaced single-arch copy fails with
+    a silent "bad CPU type in executable" OSError from Popen, with zero
+    indication of why (real feedback, Rinat, 5 сен: hit exactly this on his
+    Intel Mac against an arm64-only build). Checking archs up front turns
+    that into an actionable message instead of a mysterious silent
+    failure. If `lipo` itself is unavailable, skip the check silently
+    (fail permissive, not blocking real usage over a missing dev tool)."""
+    this_arch = platform.machine()
+    try:
+        archs = subprocess.run(
+            ["lipo", "-archs", path], capture_output=True, text=True, check=True
+        ).stdout.split()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    if this_arch in archs:
+        return None
+    return (
+        f'SystemAudioDump собран под {"/".join(archs)}, а это {this_arch} — '
+        'канал "Собеседник" пропущен, работает только микрофон. Нужна '
+        'universal-сборка под обе архитектуры (см. bin/README.md).'
+    )
 
 # Real hardware self-noise is never bit-exact zero across a whole buffer —
 # only a blocked/unnegotiated audio path (e.g. AirPods stuck outside HFP
@@ -243,6 +271,10 @@ class LiveAudioSession:
                 'SystemAudioDump не найден (задай SYSTEM_AUDIO_DUMP_PATH) — канал '
                 '"Собеседник" пропущен, работает только микрофон'
             )
+            return
+        arch_error = check_binary_arch(SYSTEM_AUDIO_DUMP_PATH)
+        if arch_error is not None:
+            print(arch_error)
             return
         self._ready.wait()
         proc = subprocess.Popen([SYSTEM_AUDIO_DUMP_PATH], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
