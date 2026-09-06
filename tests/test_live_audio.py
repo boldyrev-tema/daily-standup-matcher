@@ -4,9 +4,17 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+import asyncio
 import time
 
-from live_audio import LiveAudioSession, SYSTEM_AUDIO_DUMP_PATH, build_additional_vocab, check_binary_arch, pick_working_input_device
+from live_audio import (
+    LiveAudioSession,
+    SYSTEM_AUDIO_DUMP_PATH,
+    _notify_queue_done,
+    build_additional_vocab,
+    check_binary_arch,
+    pick_working_input_device,
+)
 from sprint_snapshot import Task
 
 DEVICES = [
@@ -164,3 +172,28 @@ def test_stop_terminates_the_real_system_audio_subprocess():
     time.sleep(0.5)
 
     assert proc.poll() is not None  # real process actually terminated
+
+
+def test_notify_queue_done_swallows_error_on_a_really_closed_loop():
+    # Real bug (5 сен): stop() already pushes this same sentinel into both
+    # queues synchronously — by the time a worker thread's own reading loop
+    # notices and reaches its redundant final push, the event loop may have
+    # already closed, and call_soon_threadsafe on a closed loop raises
+    # RuntimeError. Uses a real asyncio loop, actually closed, not a mock —
+    # the real failure mode this guards against.
+    loop = asyncio.new_event_loop()
+    q = asyncio.Queue()
+    loop.close()
+
+    _notify_queue_done(loop, q)  # must not raise
+
+
+def test_notify_queue_done_pushes_the_sentinel_on_a_live_loop():
+    loop = asyncio.new_event_loop()
+    q = asyncio.Queue()
+    try:
+        _notify_queue_done(loop, q)
+        loop.run_until_complete(asyncio.sleep(0))  # let call_soon_threadsafe's callback run
+        assert q.get_nowait() is None
+    finally:
+        loop.close()

@@ -150,6 +150,25 @@ def pick_working_input_device(devices=None, default_index=None, record=_record_p
     return default_index
 
 
+def _notify_queue_done(loop: asyncio.AbstractEventLoop, q: "asyncio.Queue") -> None:
+    """Push the None sentinel into `q`, swallowing the RuntimeError that
+    raises if `loop` has already closed. Real bug (5 сен): stop() itself
+    already pushes this same sentinel into both mic/sys queues
+    synchronously, well before either worker thread's own reading loop
+    notices `self.running` went False and reaches this redundant final
+    push (the mic thread checks at most once a second). By then the event
+    loop may already have processed the earlier sentinel, had both channel
+    coroutines return, and closed itself — making this second push a stale
+    no-op that used to crash with "RuntimeError: Event loop is closed"
+    printed straight to the terminal on every normal close, cosmetic but
+    real.
+    """
+    try:
+        loop.call_soon_threadsafe(q.put_nowait, None)
+    except RuntimeError:
+        pass
+
+
 class LiveAudioSession:
     """Streams microphone ("Ты") + optional system audio ("Собеседник") to
     Speechmatics and calls on_turn(speaker, text) once per finalized
@@ -281,7 +300,7 @@ class LiveAudioSession:
                 except queue.Empty:
                     continue
                 self._loop.call_soon_threadsafe(self._mic_queue.put_nowait, chunk)
-        self._loop.call_soon_threadsafe(self._mic_queue.put_nowait, None)
+        _notify_queue_done(self._loop, self._mic_queue)
 
     def _system_audio_loop(self) -> None:
         if not SYSTEM_AUDIO_DUMP_PATH or not os.path.exists(SYSTEM_AUDIO_DUMP_PATH):
@@ -325,5 +344,5 @@ class LiveAudioSession:
                 )
                 self._loop.call_soon_threadsafe(self._sys_queue.put_nowait, resampled)
         finally:
-            self._loop.call_soon_threadsafe(self._sys_queue.put_nowait, None)
+            _notify_queue_done(self._loop, self._sys_queue)
             proc.terminate()
