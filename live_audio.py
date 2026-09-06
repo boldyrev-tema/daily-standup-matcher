@@ -172,6 +172,7 @@ class LiveAudioSession:
         self._ready = threading.Event()
         self._mic_queue: asyncio.Queue | None = None
         self._sys_queue: asyncio.Queue | None = None
+        self._sys_proc: subprocess.Popen | None = None
 
     def start(self) -> None:
         self.running = True
@@ -187,6 +188,23 @@ class LiveAudioSession:
                 self._loop.call_soon_threadsafe(self._mic_queue.put_nowait, None)
             if self._sys_queue is not None:
                 self._loop.call_soon_threadsafe(self._sys_queue.put_nowait, None)
+        # _system_audio_loop's own `while self.running: proc.stdout.read(4096)`
+        # can't notice `self.running` went False while that read() call is
+        # still blocked waiting for the next chunk — read() has no timeout,
+        # so its `finally: proc.terminate()` never runs until more data
+        # happens to arrive (which, on a live call, MacBook-side silence
+        # doesn't prevent — SystemAudioDump keeps streaming near-zero PCM
+        # continuously — but any stall left the subprocess orphaned once the
+        # parent process itself exited). Real bug, caught live (5 сен): three
+        # separate orphaned SystemAudioDump processes had accumulated across
+        # closed sessions, competing for the same ScreenCaptureKit capture
+        # and silently breaking system audio for whichever one lost. Calling
+        # terminate() here directly — verified live that SIGTERM actually
+        # kills this specific binary, not just theoretically — means stop()
+        # itself guarantees the subprocess is gone, independent of whether
+        # the reading thread ever wakes up to run its own cleanup.
+        if self._sys_proc is not None:
+            self._sys_proc.terminate()
 
     def _run_loop(self) -> None:
         loop = asyncio.new_event_loop()
@@ -278,6 +296,15 @@ class LiveAudioSession:
             return
         self._ready.wait()
         proc = subprocess.Popen([SYSTEM_AUDIO_DUMP_PATH], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._sys_proc = proc
+        if not self.running:
+            # stop() could have run between _ready.wait() returning and this
+            # Popen call, on another thread — its own terminate() call then
+            # had nothing to terminate yet (self._sys_proc was still None).
+            # Catch that race right here instead of leaving this process
+            # orphaned the same way the blocking-read hang did.
+            proc.terminate()
+            return
         bytes_per_frame = 2 * 2  # int16 * 2 channels (SystemAudioDump выдаёт стерео)
         ratecv_state = None
         buf = b""

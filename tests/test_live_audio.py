@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from live_audio import build_additional_vocab, check_binary_arch, pick_working_input_device
+import time
+
+from live_audio import LiveAudioSession, SYSTEM_AUDIO_DUMP_PATH, build_additional_vocab, check_binary_arch, pick_working_input_device
 from sprint_snapshot import Task
 
 DEVICES = [
@@ -137,3 +139,28 @@ def test_check_binary_arch_returns_none_when_lipo_is_unavailable(monkeypatch, tm
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert check_binary_arch("bin/SystemAudioDump") is None
+
+
+def test_stop_terminates_the_real_system_audio_subprocess():
+    # Real bug, caught live (5 сен): _system_audio_loop's own
+    # `while self.running: proc.stdout.read(4096)` can't notice stop() was
+    # called while that read() is blocked waiting for the next chunk — its
+    # `finally: proc.terminate()` never runs until more data happens to
+    # arrive, leaving the real OS subprocess orphaned once the parent
+    # process exits. Three such orphans had accumulated across closed
+    # sessions on the same machine, competing for the same ScreenCaptureKit
+    # capture. stop() itself must guarantee the subprocess is gone,
+    # independent of whether the reading thread ever wakes up.
+    #
+    # Exercises the real fix against the real committed binary (not a mock
+    # subprocess) — starts it exactly the way _system_audio_loop does,
+    # assigns it to _sys_proc the same way, then calls the real stop().
+    session = LiveAudioSession(api_key="fake", on_turn=lambda speaker, text: None)
+    proc = subprocess.Popen([SYSTEM_AUDIO_DUMP_PATH], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    session._sys_proc = proc
+    assert proc.poll() is None  # actually running, not dead on arrival
+
+    session.stop()
+    time.sleep(0.5)
+
+    assert proc.poll() is not None  # real process actually terminated
